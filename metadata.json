@@ -1,0 +1,5 @@
+{
+  "name": "AES67 Stream Monitor",
+  "description": "A professional AES67 audio stream monitoring dashboard featuring drag-and-drop routing and real-time level metering.",
+  "requestFramePermissions": []
+}
