@@ -9,10 +9,9 @@ import {
   DragEndEvent 
 } from '@dnd-kit/core';
 import { MonitorSlot, Stream, StreamLevels, TOTAL_SLOTS } from './types';
-import { generateMockStreams } from './utils/audio';
 import StreamCard from './components/StreamCard';
 import MonitorSlotComponent from './components/MonitorSlot';
-import { LayoutGrid, Radio, Settings, Maximize2, ChevronDown, ChevronRight, Plus, FileText, Globe, Server, Languages } from 'lucide-react';
+import { LayoutGrid, Radio, Settings, Maximize2, ChevronDown, ChevronRight, Plus, FileText, Globe, Server, Languages, AlertTriangle, X } from 'lucide-react';
 
 const TRANSLATIONS = {
   en: {
@@ -38,6 +37,8 @@ const TRANSLATIONS = {
     unnamedManual: "Unnamed Manual Stream",
     deviceDefault: "Device",
     placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
+    streamLost: "Stream Lost",
+    streamLostMessage: "The following stream has timed out:",
   },
   zh: {
     streamExplorer: "信号源浏览器",
@@ -62,8 +63,26 @@ const TRANSLATIONS = {
     unnamedManual: "未命名信号流",
     deviceDefault: "设备",
     placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
+    streamLost: "信号丢失",
+    streamLostMessage: "以下信号源已超时下线:",
   }
 };
+
+// Notification Toast Component
+const NotificationToast = ({ message, onClose, title }: { message: string, onClose: () => void, title: string }) => (
+  <div className="fixed top-20 right-8 z-50 animate-in fade-in slide-in-from-right-10 duration-300">
+    <div className="bg-slate-800 border-l-4 border-red-500 text-white p-4 rounded shadow-2xl flex gap-3 min-w-[300px] items-start">
+        <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={20} />
+        <div className="flex-1">
+            <h4 className="font-bold text-sm text-red-100 mb-1">{title}</h4>
+            <p className="text-xs text-slate-300">{message}</p>
+        </div>
+        <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+            <X size={16} />
+        </button>
+    </div>
+  </div>
+);
 
 const App: React.FC = () => {
   // --- State ---
@@ -80,6 +99,9 @@ const App: React.FC = () => {
   const [expandedSection, setExpandedSection] = useState<'list' | 'manual' | 'device'>('list');
   const [sdpInput, setSdpInput] = useState('');
   
+  // Notification State
+  const [notification, setNotification] = useState<{title: string, message: string} | null>(null);
+
   // Device Input State
   const [deviceForm, setDeviceForm] = useState({
     name: '',
@@ -101,7 +123,29 @@ const App: React.FC = () => {
     if (window.api && window.api.onSapUpdate) {
         console.log("Subscribing to SAP updates...");
         // @ts-ignore
-        const unsubscribe = window.api.onSapUpdate((sapStreams: Stream[]) => {
+        const unsubscribe = window.api.onSapUpdate((data: { streams: Stream[], removed: string[] } | Stream[]) => {
+            
+            // Handle new protocol format { streams: [], removed: [] } or legacy array
+            let sapStreams: Stream[] = [];
+            let removedNames: string[] = [];
+            
+            if (Array.isArray(data)) {
+                sapStreams = data;
+            } else {
+                sapStreams = data.streams;
+                removedNames = data.removed;
+            }
+
+            // Show notification if streams were removed
+            if (removedNames && removedNames.length > 0) {
+                setNotification({
+                    title: t.streamLost,
+                    message: `${t.streamLostMessage} ${removedNames.join(', ')}`
+                });
+                // Auto hide after 5s
+                setTimeout(() => setNotification(null), 5000);
+            }
+
             setStreams(prevStreams => {
                 // Preserve manual and device streams, replace SAP streams
                 const otherStreams = prevStreams.filter(s => s.sourceType !== 'sap');
@@ -114,14 +158,12 @@ const App: React.FC = () => {
         });
         return () => unsubscribe();
     } else {
-        // Fallback: Simulate discovering streams over time if not in Electron
-        const allStreams = generateMockStreams(5).map(s => ({ ...s, sourceType: 'sap' as const }));
-        setStreams(allStreams);
+        // Fallback: Initialize with empty list (No mock data)
+        setStreams([]);
     }
-  }, []);
+  }, [t.streamLost, t.streamLostMessage]);
 
   // --- Device Heartbeat (Keep-Alive) ---
-  // Requirements: Send packet to Device IP port 8999 every 0.25s to trigger JSON return
   useEffect(() => {
     const heartbeatInterval = setInterval(() => {
       // Filter for device streams that need keep-alive packets
@@ -139,7 +181,7 @@ const App: React.FC = () => {
     return () => clearInterval(heartbeatInterval);
   }, [streams]);
 
-  // --- Audio Simulation Loop (Simulate Electron IPC / UDP Response) ---
+  // --- Audio Simulation Loop (Placeholder for real data) ---
   useEffect(() => {
     const intervalId = setInterval(() => {
       // Only calculate levels for streams that are currently assigned to slots
@@ -161,35 +203,18 @@ const App: React.FC = () => {
             newLevels[streamId] = Array(8).fill({ current: -100, peak: -100 });
           }
 
-          // Generate simulated audio data based on source type
+          // Generate audio data based on source type
           newLevels[streamId] = newLevels[streamId].map((ch, idx) => {
-            // Respect channel count for devices
-            if (idx >= stream.channels) {
-                return { current: -100, peak: -100 };
-            }
-
-            let current = -100;
-
-            if (stream.sourceType === 'device') {
-                // Simulate "Device" JSON response behavior: {"arr":["-10", "-20"...]}
-                // We simulate the parsed values here
-                const isSignal = Math.random() > 0.2; // Slightly more stable signal
-                // Simulate integer values often returned by hardware or string floats
-                const rawVal = isSignal ? -20 + Math.random() * 15 : -100; 
-                current = rawVal;
-            } else {
-                // Standard Multicast / Manual simulation
-                const isSignal = Math.random() > 0.1;
-                const targetDb = isSignal ? -40 + Math.random() * 40 : -100;
-                current = targetDb;
-            }
+            if (idx >= stream.channels) return { current: -100, peak: -100 };
             
+            // Silence for production build until IPC connected
+            const current = -100;
+
             // Peak Hold Logic
             let peak = ch.peak;
             if (current > peak) {
                 peak = current;
             } else {
-                // Decay peak slowly
                 peak = Math.max(-100, peak - 0.5); 
             }
 
@@ -200,7 +225,7 @@ const App: React.FC = () => {
         return newLevels;
       });
 
-    }, 50); // 20 FPS updates
+    }, 50);
 
     return () => clearInterval(intervalId);
   }, [slots, streams]);
@@ -241,7 +266,6 @@ const App: React.FC = () => {
     setSlots(prev => prev.map(slot => 
       slot.id === slotId ? { ...slot, activeStreamId: null } : slot
     ));
-    // Clean up level data
     setStreamLevels(prev => {
         const newLevels = { ...prev };
         const slot = slots.find(s => s.id === slotId);
@@ -276,7 +300,6 @@ const App: React.FC = () => {
             name = cleanLine.substring(2).trim();
         }
         if (cleanLine.startsWith('c=')) {
-            // Example: c=IN IP4 239.0.0.1/64
             const parts = cleanLine.split(' ');
             if (parts.length >= 3) {
                 ip = parts[2].split('/')[0];
@@ -311,7 +334,7 @@ const App: React.FC = () => {
           name: name.trim() || `${t.deviceDefault} ${ip}`,
           ip: ip,
           channels: channels,
-          sampleRate: 48000, // Not relevant for gain monitoring
+          sampleRate: 48000,
           format: 'JSON',
           sourceType: 'device',
           deviceConfig: {
@@ -335,8 +358,17 @@ const App: React.FC = () => {
       onDragStart={handleDragStart} 
       onDragEnd={handleDragEnd}
     >
-      <div className="flex h-screen w-full bg-transparent text-slate-200 font-sans selection:bg-teal-500/30">
+      <div className="flex h-screen w-full bg-transparent text-slate-200 font-sans selection:bg-teal-500/30 relative">
         
+        {/* Notification Toast */}
+        {notification && (
+            <NotificationToast 
+                title={notification.title} 
+                message={notification.message} 
+                onClose={() => setNotification(null)} 
+            />
+        )}
+
         {/* --- LEFT SIDEBAR: Stream Explorer --- */}
         <aside className="w-80 flex flex-col border-r border-slate-800 bg-slate-900/80 backdrop-blur-sm z-10">
           {/* Header */}

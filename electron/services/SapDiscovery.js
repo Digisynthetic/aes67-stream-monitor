@@ -24,49 +24,51 @@ class SapDiscovery extends EventEmitter {
     });
 
     this.socket.bind(this.port, () => {
-      const iface = this.getIPv4Interface();
-      if (iface) {
-        console.log(`[SAP] Binding to interface: ${iface}`);
-        try {
-          this.socket.addMembership(this.multicastGroup, iface);
-          this.socket.setMulticastInterface(iface);
-        } catch (e) {
-          console.error('[SAP] Failed to add membership:', e);
-        }
+      // Bind to all suitable IPv4 interfaces to ensure we catch multicast
+      const interfaces = this.getAllIPv4Interfaces();
+      if (interfaces.length > 0) {
+        interfaces.forEach(iface => {
+            console.log(`[SAP] Adding membership for ${this.multicastGroup} on interface: ${iface}`);
+            try {
+                this.socket.addMembership(this.multicastGroup, iface);
+            } catch (e) {
+                console.error(`[SAP] Failed to add membership on ${iface}:`, e.message);
+            }
+        });
       } else {
         console.warn('[SAP] No suitable IPv4 interface found. Discovery might fail.');
       }
     });
 
-    // Prune streams every 5 seconds (timeout 60s)
+    // Prune streams every 5 seconds (timeout 120s)
     setInterval(() => this.pruneStreams(), 5000);
   }
 
-  getIPv4Interface() {
+  getAllIPv4Interfaces() {
+    const ips = [];
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
       for (const iface of interfaces[name]) {
         // Skip internal (localhost) and non-IPv4
         if (iface.family === 'IPv4' && !iface.internal) {
-          return iface.address;
+          ips.push(iface.address);
         }
       }
     }
-    return null;
+    return ips;
   }
 
   handleMessage(msg, rinfo) {
-    const text = msg.toString('utf8');
-    
-    // Basic SDP Validation (SAP header is usually skipped or handled, 
-    // but often SDP starts directly after header in simple implementations 
-    // or we just regex the body)
-    
-    // Check for v=0 (SDP Version)
-    if (!text.includes('v=0')) return;
+    // Robust parsing: Find start of SDP payload via "v=0"
+    const msgString = msg.toString('utf8');
+    const sdpIndex = msgString.indexOf('v=0');
+
+    if (sdpIndex === -1) return; // Not a valid SDP packet or header only
+
+    const sdpText = msgString.substring(sdpIndex);
 
     try {
-      const stream = this.parseSdp(text, rinfo.address);
+      const stream = this.parseSdp(sdpText, rinfo.address);
       if (stream) {
         const existing = this.streams.get(stream.id);
         
@@ -75,9 +77,9 @@ class SapDiscovery extends EventEmitter {
           lastSeen: Date.now()
         });
 
-        // If it's a new stream or significant change, emit update
+        // If it's a new stream, emit update immediately
         if (!existing) {
-          this.emitStreams();
+          this.emitStreams([]);
         }
       }
     } catch (e) {
@@ -130,22 +132,27 @@ class SapDiscovery extends EventEmitter {
   pruneStreams() {
     const now = Date.now();
     let changed = false;
+    const removedNames = [];
     
+    // Timeout set to 120 seconds (2 minutes)
+    const TIMEOUT_MS = 120000;
+
     for (const [id, data] of this.streams) {
-      if (now - data.lastSeen > 60000) { // 60s timeout
+      if (now - data.lastSeen > TIMEOUT_MS) {
         this.streams.delete(id);
+        removedNames.push(data.streamData.name);
         changed = true;
       }
     }
 
     if (changed) {
-      this.emitStreams();
+      this.emitStreams(removedNames);
     }
   }
 
-  emitStreams() {
+  emitStreams(removedNames = []) {
     const list = Array.from(this.streams.values()).map(d => d.streamData);
-    this.emit('update', list);
+    this.emit('update', { streams: list, removed: removedNames });
   }
 }
 
