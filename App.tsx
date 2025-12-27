@@ -94,11 +94,30 @@ const App: React.FC = () => {
   // DnD State
   const [activeDragStream, setActiveDragStream] = useState<Stream | null>(null);
 
-  // --- Initialization (Simulate SAP Discovery) ---
+  // --- Initialization & SAP Discovery ---
   useEffect(() => {
-    // Simulate discovering streams over time
-    const allStreams = generateMockStreams(5).map(s => ({ ...s, sourceType: 'sap' as const }));
-    setStreams(allStreams);
+    // Check if running in Electron with API exposed
+    // @ts-ignore
+    if (window.api && window.api.onSapUpdate) {
+        console.log("Subscribing to SAP updates...");
+        // @ts-ignore
+        const unsubscribe = window.api.onSapUpdate((sapStreams: Stream[]) => {
+            setStreams(prevStreams => {
+                // Preserve manual and device streams, replace SAP streams
+                const otherStreams = prevStreams.filter(s => s.sourceType !== 'sap');
+                
+                // Ensure the incoming SAP streams have the correct type
+                const validatedSapStreams = sapStreams.map(s => ({...s, sourceType: 'sap' as const}));
+                
+                return [...otherStreams, ...validatedSapStreams];
+            });
+        });
+        return () => unsubscribe();
+    } else {
+        // Fallback: Simulate discovering streams over time if not in Electron
+        const allStreams = generateMockStreams(5).map(s => ({ ...s, sourceType: 'sap' as const }));
+        setStreams(allStreams);
+    }
   }, []);
 
   // --- Device Heartbeat (Keep-Alive) ---
@@ -113,9 +132,6 @@ const App: React.FC = () => {
            // In a real Electron/Node environment, this would be:
            // const port = stream.deviceConfig?.pollingPort || 8999;
            // udpSocket.send('KEEP_ALIVE', port, stream.ip);
-           
-           // For debugging/simulation visibility (commented out to prevent console spam):
-           // console.log(`[UDP Heartbeat] Sending to ${stream.ip}:8999`);
         });
       }
     }, 250); // 250ms interval
