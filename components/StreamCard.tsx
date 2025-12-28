@@ -1,20 +1,21 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { Stream } from '../types';
-import { Signal, Server, Radio, Hash } from 'lucide-react';
+import { Signal, Server, Radio, Hash, Trash2 } from 'lucide-react';
 
 interface StreamCardProps {
   stream: Stream;
   isOverlay?: boolean;
+  onDelete?: (id: string) => void;
 }
 
-const StreamCard: React.FC<StreamCardProps> = ({ stream, isOverlay = false }) => {
+const StreamCard: React.FC<StreamCardProps> = ({ stream, isOverlay = false, onDelete }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: stream.id,
     data: { stream },
   });
 
-  const baseClasses = "p-3 rounded-lg border flex flex-col gap-2 transition-colors cursor-grab active:cursor-grabbing group";
+  const baseClasses = "p-3 rounded-lg border flex flex-col gap-2 transition-colors cursor-grab active:cursor-grabbing group relative";
   
   // Updated colors to match logo theme
   const styles = isOverlay
@@ -38,9 +39,9 @@ const StreamCard: React.FC<StreamCardProps> = ({ stream, isOverlay = false }) =>
       className={`${baseClasses} ${styles}`}
     >
       <div className="flex justify-between items-start">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-w-[80%]">
           {renderIcon()}
-          <h3 className={`font-semibold text-sm truncate max-w-[150px] ${isOverlay ? 'text-white' : 'text-slate-200'}`}>
+          <h3 className={`font-semibold text-sm truncate ${isOverlay ? 'text-white' : 'text-slate-200'}`}>
             {stream.name}
           </h3>
         </div>
@@ -49,9 +50,25 @@ const StreamCard: React.FC<StreamCardProps> = ({ stream, isOverlay = false }) =>
         </div>
       </div>
       
+      {/* Delete Button (Only active if onDelete is provided) */}
+      {!isOverlay && onDelete && (
+          <button 
+            onClick={(e) => {
+                e.stopPropagation(); // Prevent drag start
+                onDelete(stream.id);
+            }}
+            className="absolute top-2 right-12 p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Remove Stream"
+          >
+             <Trash2 size={14} />
+          </button>
+      )}
+      
       <div className={`grid grid-cols-2 gap-x-2 text-[10px] font-mono ${isOverlay ? 'text-teal-100' : 'text-slate-400'}`}>
         <div className="flex items-center gap-1 col-span-2 sm:col-span-1">
-            <span className="opacity-50">IP:</span> {stream.ip}
+            <span className="opacity-50">IP:</span> 
+            {stream.ip}
+            {stream.sourceType !== 'device' && <span className="opacity-50">:{stream.port}</span>}
         </div>
         
         {stream.sourceType === 'device' && stream.deviceConfig ? (

@@ -1,6 +1,6 @@
-const dgram = require('dgram');
-const os = require('os');
-const { EventEmitter } = require('events');
+import dgram from 'dgram';
+import os from 'os';
+import { EventEmitter } from 'events';
 
 class SapDiscovery extends EventEmitter {
   constructor() {
@@ -9,6 +9,51 @@ class SapDiscovery extends EventEmitter {
     this.streams = new Map(); // Key: ID, Value: { streamData, lastSeen }
     this.multicastGroup = '239.255.255.255';
     this.port = 9875;
+    this.activeInterface = null;
+  }
+
+  getInterfaces() {
+    const interfaces = os.networkInterfaces();
+    const result = [];
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        // Skip internal (localhost) and non-IPv4
+        if (iface.family === 'IPv4' && !iface.internal) {
+          result.push({ name, address: iface.address });
+        }
+      }
+    }
+    return result;
+  }
+
+  setInterface(ip) {
+    if (this.activeInterface === ip) return;
+
+    // Drop membership from old interface if socket is active
+    if (this.socket && this.activeInterface) {
+        try {
+            this.socket.dropMembership(this.multicastGroup, this.activeInterface);
+            console.log(`[SAP] Dropped membership for ${this.activeInterface}`);
+        } catch (e) {
+            console.warn(`[SAP] Failed to drop membership: ${e.message}`);
+        }
+    }
+
+    this.activeInterface = ip;
+    
+    // Clear streams when switching networks
+    this.streams.clear();
+    this.emitStreams([]);
+
+    // Add membership to new interface
+    if (this.socket && this.activeInterface) {
+        try {
+            console.log(`[SAP] Binding to interface: ${this.activeInterface}`);
+            this.socket.addMembership(this.multicastGroup, this.activeInterface);
+        } catch (e) {
+            console.error(`[SAP] Failed to add membership for ${this.activeInterface}:`, e.message);
+        }
+    }
   }
 
   start() {
@@ -24,17 +69,20 @@ class SapDiscovery extends EventEmitter {
     });
 
     this.socket.bind(this.port, () => {
-      // Bind to all suitable IPv4 interfaces to ensure we catch multicast
-      const interfaces = this.getAllIPv4Interfaces();
-      if (interfaces.length > 0) {
-        interfaces.forEach(iface => {
-            console.log(`[SAP] Adding membership for ${this.multicastGroup} on interface: ${iface}`);
+      // Initialize with the first available interface or the active one
+      const ifaces = this.getInterfaces();
+      if (ifaces.length > 0) {
+        if (!this.activeInterface) {
+            // Default to first interface
+            this.setInterface(ifaces[0].address);
+        } else {
+            // Re-bind existing choice (e.g. if socket restarted)
             try {
-                this.socket.addMembership(this.multicastGroup, iface);
+                this.socket.addMembership(this.multicastGroup, this.activeInterface);
             } catch (e) {
-                console.error(`[SAP] Failed to add membership on ${iface}:`, e.message);
+                console.error(`[SAP] Failed to restore membership: ${e.message}`);
             }
-        });
+        }
       } else {
         console.warn('[SAP] No suitable IPv4 interface found. Discovery might fail.');
       }
@@ -42,20 +90,6 @@ class SapDiscovery extends EventEmitter {
 
     // Prune streams every 5 seconds (timeout 120s)
     setInterval(() => this.pruneStreams(), 5000);
-  }
-
-  getAllIPv4Interfaces() {
-    const ips = [];
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-      for (const iface of interfaces[name]) {
-        // Skip internal (localhost) and non-IPv4
-        if (iface.family === 'IPv4' && !iface.internal) {
-          ips.push(iface.address);
-        }
-      }
-    }
-    return ips;
   }
 
   handleMessage(msg, rinfo) {
@@ -92,6 +126,7 @@ class SapDiscovery extends EventEmitter {
     
     let name = 'Unknown Stream';
     let ip = '';
+    let port = 5004; // Default RTP port
     let id = '';
     let channels = 2;
     let sampleRate = 48000;
@@ -102,6 +137,14 @@ class SapDiscovery extends EventEmitter {
         // c=IN IP4 239.0.0.1/32
         const parts = line.split(' ');
         if (parts.length >= 3) ip = parts[2].split('/')[0];
+      }
+      if (line.startsWith('m=')) {
+        // m=audio 5004 RTP/AVP 96
+        const parts = line.split(' ');
+        if (parts.length >= 2) {
+            const parsedPort = parseInt(parts[1]);
+            if (!isNaN(parsedPort)) port = parsedPort;
+        }
       }
       if (line.startsWith('o=')) {
         // o=- 12345 12345 IN IP4 10.0.0.1
@@ -122,6 +165,7 @@ class SapDiscovery extends EventEmitter {
       id: Buffer.from(id).toString('base64'), // Create safe ID
       name,
       ip: ip || sourceIp, // Fallback to packet source if multicast IP not found
+      port,
       channels,
       sampleRate,
       format: 'L24', // Default for AES67
@@ -156,4 +200,4 @@ class SapDiscovery extends EventEmitter {
   }
 }
 
-module.exports = SapDiscovery;
+export default SapDiscovery;

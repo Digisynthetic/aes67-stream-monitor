@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   DndContext, 
   DragOverlay, 
@@ -8,14 +8,14 @@ import {
   DragStartEvent, 
   DragEndEvent 
 } from '@dnd-kit/core';
-import { MonitorSlot, Stream, StreamLevels, TOTAL_SLOTS } from './types';
+import { MonitorSlot, Stream, StreamLevels, TOTAL_SLOTS, NetworkInterface } from './types';
 import StreamCard from './components/StreamCard';
 import MonitorSlotComponent from './components/MonitorSlot';
-import { LayoutGrid, Radio, Settings, Maximize2, ChevronDown, ChevronRight, Plus, FileText, Globe, Server, Languages, AlertTriangle, X } from 'lucide-react';
+import { LayoutGrid, Radio, Settings, Maximize2, ChevronDown, ChevronRight, Plus, FileText, Globe, Server, Languages, AlertTriangle, X, Network } from 'lucide-react';
 
 const TRANSLATIONS = {
   en: {
-    streamExplorer: "Stream Explorer",
+    streamExplorer: "Stream Monitor",
     availableStreams: "Available Streams",
     manualInput: "Manual Input (SDP)",
     deviceMonitor: "Device Monitor (UDP)",
@@ -39,9 +39,14 @@ const TRANSLATIONS = {
     placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
     streamLost: "Stream Lost",
     streamLostMessage: "The following stream has timed out:",
+    selectNic: "Select Network Interface",
+    invalidIpTitle: "Invalid IP Address",
+    invalidIpMessage: "Please enter a valid IPv4 address (e.g., 239.1.2.3 or 192.168.1.10).",
+    invalidSdpTitle: "Invalid SDP Data",
+    invalidSdpMessage: "The SDP data is missing required fields (v=, c=, m=). Please check your input.",
   },
   zh: {
-    streamExplorer: "信号源浏览器",
+    streamExplorer: "AoIP流监视器",
     availableStreams: "自动发现 (SAP)",
     manualInput: "手动输入 (SDP)",
     deviceMonitor: "设备电平 (UDP)",
@@ -65,6 +70,197 @@ const TRANSLATIONS = {
     placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
     streamLost: "信号丢失",
     streamLostMessage: "以下信号源已超时下线:",
+    selectNic: "选择监听网卡",
+    invalidIpTitle: "无效 IP 地址",
+    invalidIpMessage: "请输入有效的 IPv4 地址 (例如 239.1.2.3 或 192.168.1.10)。",
+    invalidSdpTitle: "SDP 数据无效",
+    invalidSdpMessage: "SDP 数据缺少关键字段 (v=, c=, m=)。请检查输入内容。",
+  },
+  ja: {
+    streamExplorer: "AoIPストリームモニター",
+    availableStreams: "利用可能なストリーム (SAP)",
+    manualInput: "手動入力 (SDP)",
+    deviceMonitor: "デバイスモニター (UDP)",
+    noStreams: "SAP経由のストリームが検出されませんでした。",
+    pasteSdp: "SDPデータを貼り付け",
+    addStream: "ストリームを追加",
+    deviceConfig: "デバイス構成",
+    deviceName: "デバイス名 (任意)",
+    ipAddress: "IPアドレス",
+    startId: "開始ID",
+    count: "数 (1-8)",
+    addMonitor: "モニターを追加",
+    monitoringWall: "監視ウォール",
+    online: "オンライン",
+    dropHere: "ここにストリームをドロップ",
+    disconnect: "切断",
+    rename: "ダブルクリックで名前を変更",
+    manualStream: "手動ストリーム",
+    unnamedManual: "無名の手動ストリーム",
+    deviceDefault: "デバイス",
+    placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
+    streamLost: "ストリーム損失",
+    streamLostMessage: "次のストリームがタイムアウトしました:",
+    selectNic: "ネットワークインターフェースを選択",
+    invalidIpTitle: "無効なIPアドレス",
+    invalidIpMessage: "有効なIPv4アドレスを入力してください（例：239.1.2.3 または 192.168.1.10）。",
+    invalidSdpTitle: "無効なSDPデータ",
+    invalidSdpMessage: "SDPデータに必要なフィールド（v=, c=, m=）が不足しています。入力を確認してください。",
+  },
+  fr: {
+    streamExplorer: "Moniteur de Flux",
+    availableStreams: "Flux Disponibles (SAP)",
+    manualInput: "Entrée Manuelle (SDP)",
+    deviceMonitor: "Moniteur d'Appareil (UDP)",
+    noStreams: "Aucun flux détecté via SAP.",
+    pasteSdp: "Coller les données SDP",
+    addStream: "Ajouter un Flux",
+    deviceConfig: "Configuration de l'Appareil",
+    deviceName: "Nom (Opt)",
+    ipAddress: "Adresse IP",
+    startId: "ID de Début",
+    count: "Nombre (1-8)",
+    addMonitor: "Ajouter Moniteur",
+    monitoringWall: "Mur de Surveillance",
+    online: "En Ligne",
+    dropHere: "Déposer le Flux Ici",
+    disconnect: "Déconnecter",
+    rename: "Double-cliquer pour renommer",
+    manualStream: "Flux Manuel",
+    unnamedManual: "Flux Manuel Sans Nom",
+    deviceDefault: "Appareil",
+    placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
+    streamLost: "Flux Perdu",
+    streamLostMessage: "Le flux suivant a expiré :",
+    selectNic: "Choisir l'Interface Réseau",
+    invalidIpTitle: "Adresse IP Invalide",
+    invalidIpMessage: "Veuillez entrer une adresse IPv4 valide (ex: 239.1.2.3 ou 192.168.1.10).",
+    invalidSdpTitle: "Données SDP Invalides",
+    invalidSdpMessage: "Les données SDP manquent de champs requis (v=, c=, m=). Veuillez vérifier votre entrée.",
+  },
+  de: {
+    streamExplorer: "Stream-Monitor",
+    availableStreams: "Verfügbare Streams (SAP)",
+    manualInput: "Manuelle Eingabe (SDP)",
+    deviceMonitor: "Gerätemonitor (UDP)",
+    noStreams: "Keine Streams über SAP erkannt.",
+    pasteSdp: "SDP-Daten einfügen",
+    addStream: "Stream hinzufügen",
+    deviceConfig: "Gerätekonfiguration",
+    deviceName: "Gerätename (Opt)",
+    ipAddress: "IP-Adresse",
+    startId: "Start-ID",
+    count: "Anzahl (1-8)",
+    addMonitor: "Monitor hinzufügen",
+    monitoringWall: "Überwachungswand",
+    online: "Online",
+    dropHere: "Stream hier ablegen",
+    disconnect: "Trennen",
+    rename: "Doppelklick zum Umbenennen",
+    manualStream: "Manueller Stream",
+    unnamedManual: "Unbenannter manueller Stream",
+    deviceDefault: "Gerät",
+    placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
+    streamLost: "Stream verloren",
+    streamLostMessage: "Der folgende Stream hat das Zeitlimit überschritten:",
+    selectNic: "Netzwerkschnittstelle auswählen",
+    invalidIpTitle: "Ungültige IP-Adresse",
+    invalidIpMessage: "Bitte geben Sie eine gültige IPv4-Adresse ein (z. B. 239.1.2.3 oder 192.168.1.10).",
+    invalidSdpTitle: "Ungültige SDP-Daten",
+    invalidSdpMessage: "Den SDP-Daten fehlen erforderliche Felder (v=, c=, m=). Bitte überprüfen Sie Ihre Eingabe.",
+  },
+  ko: {
+    streamExplorer: "AoIP 스트림 모니터",
+    availableStreams: "사용 가능한 스트림 (SAP)",
+    manualInput: "수동 입력 (SDP)",
+    deviceMonitor: "장치 모니터 (UDP)",
+    noStreams: "SAP를 통해 감지된 스트림이 없습니다.",
+    pasteSdp: "SDP 데이터 붙여넣기",
+    addStream: "스트림 추가",
+    deviceConfig: "장치 구성",
+    deviceName: "장치 이름 (선택)",
+    ipAddress: "IP 주소",
+    startId: "시작 ID",
+    count: "개수 (1-8)",
+    addMonitor: "모니터 추가",
+    monitoringWall: "모니터링 월",
+    online: "온라인",
+    dropHere: "여기에 스트림 드롭",
+    disconnect: "연결 해제",
+    rename: "더블 클릭하여 이름 변경",
+    manualStream: "수동 스트림",
+    unnamedManual: "이름 없는 수동 스트림",
+    deviceDefault: "장치",
+    placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
+    streamLost: "스트림 손실",
+    streamLostMessage: "다음 스트림의 시간이 초과되었습니다:",
+    selectNic: "네트워크 인터페이스 선택",
+    invalidIpTitle: "유효하지 않은 IP 주소",
+    invalidIpMessage: "유효한 IPv4 주소를 입력하십시오 (예: 239.1.2.3 또는 192.168.1.10).",
+    invalidSdpTitle: "유효하지 않은 SDP 데이터",
+    invalidSdpMessage: "SDP 데이터에 필수 필드 (v=, c=, m=)가 누락되었습니다. 입력을 확인하십시오.",
+  },
+  es: {
+    streamExplorer: "Monitor de Flujo",
+    availableStreams: "Flujos Disponibles (SAP)",
+    manualInput: "Entrada Manual (SDP)",
+    deviceMonitor: "Monitor de Dispositivo (UDP)",
+    noStreams: "No se detectaron flujos vía SAP.",
+    pasteSdp: "Pegar datos SDP",
+    addStream: "Añadir Flujo",
+    deviceConfig: "Configuración del Dispositivo",
+    deviceName: "Nombre (Opt)",
+    ipAddress: "Dirección IP",
+    startId: "ID Inicial",
+    count: "Cantidad (1-8)",
+    addMonitor: "Añadir Monitor",
+    monitoringWall: "Muro de Monitoreo",
+    online: "En Línea",
+    dropHere: "Soltar Flujo Aquí",
+    disconnect: "Desconectar",
+    rename: "Doble clic para renombrar",
+    manualStream: "Flujo Manual",
+    unnamedManual: "Flujo Manual Sin Nombre",
+    deviceDefault: "Dispositivo",
+    placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
+    streamLost: "Flujo Perdido",
+    streamLostMessage: "El siguiente flujo ha expirado:",
+    selectNic: "Seleccionar Interfaz de Red",
+    invalidIpTitle: "Dirección IP Inválida",
+    invalidIpMessage: "Por favor, introduzca una dirección IPv4 válida (ej: 239.1.2.3 o 192.168.1.10).",
+    invalidSdpTitle: "Datos SDP Inválidos",
+    invalidSdpMessage: "Faltan campos obligatorios en los datos SDP (v=, c=, m=). Por favor, verifique su entrada.",
+  },
+  it: {
+    streamExplorer: "Monitor di Flusso",
+    availableStreams: "Flussi Disponibili (SAP)",
+    manualInput: "Input Manuale (SDP)",
+    deviceMonitor: "Monitor Dispositivo (UDP)",
+    noStreams: "Nessun flusso rilevato via SAP.",
+    pasteSdp: "Incolla Dati SDP",
+    addStream: "Aggiungi Flusso",
+    deviceConfig: "Configurazione Dispositivo",
+    deviceName: "Nome (Opz)",
+    ipAddress: "Indirizzo IP",
+    startId: "ID Iniziale",
+    count: "Conteggio (1-8)",
+    addMonitor: "Aggiungi Monitor",
+    monitoringWall: "Parete di Monitoraggio",
+    online: "Online",
+    dropHere: "Rilascia Flusso Qui",
+    disconnect: "Disconnetti",
+    rename: "Doppio clic per rinominare",
+    manualStream: "Flusso Manuale",
+    unnamedManual: "Flusso Manuale Senza Nome",
+    deviceDefault: "Dispositivo",
+    placeholderSdp: "v=0\no=- 1234 1234 IN IP4 192.168.1.1...",
+    streamLost: "Flusso Perso",
+    streamLostMessage: "Il seguente flusso è scaduto:",
+    selectNic: "Seleziona Interfaccia di Rete",
+    invalidIpTitle: "Indirizzo IP Non Valido",
+    invalidIpMessage: "Inserisci un indirizzo IPv4 valido (es: 239.1.2.3 o 192.168.1.10).",
+    invalidSdpTitle: "Dati SDP Non Validi",
+    invalidSdpMessage: "Mancano campi obbligatori nei dati SDP (v=, c=, m=). Controlla il tuo input.",
   }
 };
 
@@ -92,7 +288,7 @@ const App: React.FC = () => {
   );
   
   // Language State
-  const [language, setLanguage] = useState<'en' | 'zh'>('zh');
+  const [language, setLanguage] = useState<keyof typeof TRANSLATIONS>('zh');
   const t = TRANSLATIONS[language];
 
   // Sidebar UI State
@@ -101,6 +297,10 @@ const App: React.FC = () => {
   
   // Notification State
   const [notification, setNotification] = useState<{title: string, message: string} | null>(null);
+
+  // Network Interfaces State
+  const [interfaces, setInterfaces] = useState<NetworkInterface[]>([]);
+  const [selectedNic, setSelectedNic] = useState<string>('');
 
   // Device Input State
   const [deviceForm, setDeviceForm] = useState({
@@ -116,119 +316,165 @@ const App: React.FC = () => {
   // DnD State
   const [activeDragStream, setActiveDragStream] = useState<Stream | null>(null);
 
+  // Ref to track active streams for start/stop logic
+  const activeStreamsRef = useRef<Set<string>>(new Set());
+
   // --- Initialization & SAP Discovery ---
   useEffect(() => {
     // Check if running in Electron with API exposed
     // @ts-ignore
-    if (window.api && window.api.onSapUpdate) {
-        console.log("Subscribing to SAP updates...");
+    if (window.api) {
+        // SAP Updates
         // @ts-ignore
-        const unsubscribe = window.api.onSapUpdate((data: { streams: Stream[], removed: string[] } | Stream[]) => {
-            
-            // Handle new protocol format { streams: [], removed: [] } or legacy array
-            let sapStreams: Stream[] = [];
-            let removedNames: string[] = [];
-            
-            if (Array.isArray(data)) {
-                sapStreams = data;
-            } else {
-                sapStreams = data.streams;
-                removedNames = data.removed;
-            }
+        if (window.api.onSapUpdate) {
+            console.log("Subscribing to SAP updates...");
+            // @ts-ignore
+            const unsubscribeSap = window.api.onSapUpdate((data: { streams: Stream[], removed: string[] } | Stream[]) => {
+                let sapStreams: Stream[] = [];
+                let removedNames: string[] = [];
+                
+                if (Array.isArray(data)) {
+                    sapStreams = data;
+                } else {
+                    sapStreams = data.streams;
+                    removedNames = data.removed;
+                }
 
-            // Show notification if streams were removed
-            if (removedNames && removedNames.length > 0) {
-                setNotification({
-                    title: t.streamLost,
-                    message: `${t.streamLostMessage} ${removedNames.join(', ')}`
+                if (removedNames && removedNames.length > 0) {
+                    setNotification({
+                        title: t.streamLost,
+                        message: `${t.streamLostMessage} ${removedNames.join(', ')}`
+                    });
+                    setTimeout(() => setNotification(null), 5000);
+                }
+
+                setStreams(prevStreams => {
+                    // Keep manual/device streams, replace SAP streams
+                    const otherStreams = prevStreams.filter(s => s.sourceType !== 'sap');
+                    const validatedSapStreams = sapStreams.map(s => ({...s, sourceType: 'sap' as const}));
+                    return [...otherStreams, ...validatedSapStreams];
                 });
-                // Auto hide after 5s
-                setTimeout(() => setNotification(null), 5000);
+            });
+
+            // Audio Levels Update (4Hz from backend)
+            // @ts-ignore
+            const unsubscribeAudio = window.api.onAudioLevels((levels: any) => {
+                setStreamLevels(prev => {
+                    // Merge new levels with existing, or just replace relevant IDs
+                    // Backend sends { streamId: [db, db, ...] }
+                    const newLevels: StreamLevels = {};
+                    
+                    // Process backend levels (simple array of numbers) to {current, peak} structure
+                    Object.keys(levels).forEach(id => {
+                        const dbValues: number[] = levels[id];
+                        const prevValues = prev[id] || [];
+                        
+                        const newChannelLevels = dbValues.map((db, idx) => {
+                            // Calculate Peak Hold in Frontend
+                            const prevPeak = prevValues[idx]?.peak || -100;
+                            let peak = prevPeak;
+                            
+                            if (db > peak) {
+                                peak = db;
+                            } else {
+                                // Decay peak
+                                peak = Math.max(-100, peak - 0.5); 
+                            }
+                            return { current: db, peak };
+                        });
+                        
+                        newLevels[id] = newChannelLevels;
+                    });
+                    
+                    return { ...prev, ...newLevels };
+                });
+            });
+            
+            // Initial Interface Fetch
+            // @ts-ignore
+            if (window.api.getInterfaces) {
+                // @ts-ignore
+                window.api.getInterfaces().then((nics: NetworkInterface[]) => {
+                    setInterfaces(nics);
+                    if (nics.length > 0) {
+                        setSelectedNic(nics[0].address);
+                    }
+                });
             }
 
-            setStreams(prevStreams => {
-                // Preserve manual and device streams, replace SAP streams
-                const otherStreams = prevStreams.filter(s => s.sourceType !== 'sap');
-                
-                // Ensure the incoming SAP streams have the correct type
-                const validatedSapStreams = sapStreams.map(s => ({...s, sourceType: 'sap' as const}));
-                
-                return [...otherStreams, ...validatedSapStreams];
-            });
-        });
-        return () => unsubscribe();
+            return () => {
+                unsubscribeSap();
+                unsubscribeAudio();
+            };
+        }
     } else {
-        // Fallback: Initialize with empty list (No mock data)
+        // Fallback: Browser Development Mode (Mock Data)
         setStreams([]);
+        setInterfaces([
+            { name: "Browser Simulation Mode", address: "Localhost" }
+        ]);
+        setSelectedNic("Localhost");
     }
   }, [t.streamLost, t.streamLostMessage]);
 
-  // --- Device Heartbeat (Keep-Alive) ---
+  // --- Monitoring Logic (Start/Stop Backend Monitoring) ---
   useEffect(() => {
-    const heartbeatInterval = setInterval(() => {
-      // Filter for device streams that need keep-alive packets
-      const deviceStreams = streams.filter(s => s.sourceType === 'device');
-      
-      if (deviceStreams.length > 0) {
-        deviceStreams.forEach(stream => {
-           // In a real Electron/Node environment, this would be:
-           // const port = stream.deviceConfig?.pollingPort || 8999;
-           // udpSocket.send('KEEP_ALIVE', port, stream.ip);
-        });
-      }
-    }, 250); // 250ms interval
+    // Determine which streams should be active based on slots
+    const requiredStreamIds = new Set(
+        slots.map(s => s.activeStreamId).filter((id): id is string => id !== null)
+    );
 
-    return () => clearInterval(heartbeatInterval);
-  }, [streams]);
+    const prevActive = activeStreamsRef.current;
 
-  // --- Audio Simulation Loop (Placeholder for real data) ---
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      // Only calculate levels for streams that are currently assigned to slots
-      const activeStreamIds = slots
-        .map(s => s.activeStreamId)
-        .filter((id): id is string => id !== null);
-
-      if (activeStreamIds.length === 0) return;
-
-      setStreamLevels(prevLevels => {
-        const newLevels: StreamLevels = { ...prevLevels };
-        
-        activeStreamIds.forEach(streamId => {
-          const stream = streams.find(s => s.id === streamId);
-          if (!stream) return;
-
-          // Initialize if needed
-          if (!newLevels[streamId]) {
-            newLevels[streamId] = Array(8).fill({ current: -100, peak: -100 });
-          }
-
-          // Generate audio data based on source type
-          newLevels[streamId] = newLevels[streamId].map((ch, idx) => {
-            if (idx >= stream.channels) return { current: -100, peak: -100 };
-            
-            // Silence for production build until IPC connected
-            const current = -100;
-
-            // Peak Hold Logic
-            let peak = ch.peak;
-            if (current > peak) {
-                peak = current;
-            } else {
-                peak = Math.max(-100, peak - 0.5); 
+    // Find streams to start
+    requiredStreamIds.forEach(id => {
+        if (!prevActive.has(id)) {
+            // Find full stream object
+            const stream = streams.find(s => s.id === id);
+            if (stream) {
+                console.log("Start monitoring:", stream.name);
+                // @ts-ignore
+                if (window.api && window.api.startMonitoring) {
+                    // @ts-ignore
+                    window.api.startMonitoring(stream);
+                }
             }
+        }
+    });
 
-            return { current, peak };
-          });
-        });
-        
-        return newLevels;
-      });
+    // Find streams to stop
+    prevActive.forEach(id => {
+        if (!requiredStreamIds.has(id)) {
+            console.log("Stop monitoring:", id);
+            // @ts-ignore
+            if (window.api && window.api.stopMonitoring) {
+                 // @ts-ignore
+                window.api.stopMonitoring(id);
+                
+                // Cleanup levels
+                setStreamLevels(prev => {
+                    const next = { ...prev };
+                    delete next[id];
+                    return next;
+                });
+            }
+        }
+    });
 
-    }, 50);
+    // Update ref
+    activeStreamsRef.current = requiredStreamIds;
 
-    return () => clearInterval(intervalId);
   }, [slots, streams]);
+
+  const handleInterfaceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const ip = e.target.value;
+    setSelectedNic(ip);
+    // @ts-ignore
+    if (window.api && window.api.setInterface) {
+        // @ts-ignore
+        window.api.setInterface(ip);
+    }
+  };
 
   // --- Drag & Drop Handlers ---
   const sensors = useSensors(
@@ -266,15 +512,7 @@ const App: React.FC = () => {
     setSlots(prev => prev.map(slot => 
       slot.id === slotId ? { ...slot, activeStreamId: null } : slot
     ));
-    setStreamLevels(prev => {
-        const newLevels = { ...prev };
-        const slot = slots.find(s => s.id === slotId);
-        if (slot?.activeStreamId) {
-            delete newLevels[slot.activeStreamId];
-        }
-        return newLevels;
-    });
-  }, [slots]);
+  }, []);
 
   // --- Stream Management ---
   const handleRenameStream = useCallback((streamId: string, newName: string) => {
@@ -285,15 +523,39 @@ const App: React.FC = () => {
     ));
   }, []);
 
+  const handleDeleteStream = useCallback((streamId: string) => {
+    // Only allow deletion of manual or device streams (client-side only removal)
+    setStreams(prev => prev.filter(stream => stream.id !== streamId));
+    
+    // Also clear from any active slot
+    setSlots(prev => prev.map(slot => 
+        slot.activeStreamId === streamId ? { ...slot, activeStreamId: null } : slot
+    ));
+  }, []);
+
   const handleAddSdp = () => {
     if (!sdpInput.trim()) return;
+
+    // Validate SDP minimal requirements
+    // Must contain v=, c=, m=
+    if (!sdpInput.includes('v=') || !sdpInput.includes('c=') || !sdpInput.includes('m=')) {
+        setNotification({
+            title: t.invalidSdpTitle,
+            message: t.invalidSdpMessage
+        });
+        setTimeout(() => setNotification(null), 4000);
+        return;
+    }
 
     // Basic Parsing of SDP
     const lines = sdpInput.split('\n');
     let name = t.manualStream;
     let ip = 'Unknown IP';
+    let port = 5004;
+    let channels = 2; // Default to stereo
+    let sampleRate = 48000;
     
-    // Attempt to extract s= (Session Name) and c= (Connection Data)
+    // Attempt to extract s=, c=, m=, and a=rtpmap
     lines.forEach(line => {
         const cleanLine = line.trim();
         if (cleanLine.startsWith('s=')) {
@@ -305,14 +567,34 @@ const App: React.FC = () => {
                 ip = parts[2].split('/')[0];
             }
         }
+        if (cleanLine.startsWith('m=')) {
+            const parts = cleanLine.split(' ');
+            if (parts.length >= 2) port = parseInt(parts[1]) || 5004;
+        }
+        if (cleanLine.startsWith('a=rtpmap:')) {
+            // format: a=rtpmap:<payloadType> <encodingName>/<clockRate>[/<encodingParameters>]
+            // example: a=rtpmap:96 L24/48000/6
+            const parts = cleanLine.split('/');
+            if (parts.length >= 2) {
+                const parsedRate = parseInt(parts[1]);
+                if (!isNaN(parsedRate)) sampleRate = parsedRate;
+            }
+            if (parts.length >= 3) {
+                const parsedChannels = parseInt(parts[2]);
+                if (!isNaN(parsedChannels)) {
+                    channels = parsedChannels;
+                }
+            }
+        }
     });
 
     const newStream: Stream = {
         id: `manual-${Date.now()}`,
         name: name || t.unnamedManual,
         ip: ip || '0.0.0.0',
-        channels: 8,
-        sampleRate: 48000,
+        port: port,
+        channels: channels, // Dynamic channels from SDP
+        sampleRate: sampleRate,
         format: 'L24',
         sourceType: 'manual'
     };
@@ -326,13 +608,27 @@ const App: React.FC = () => {
       const { name, ip, idStart, count } = deviceForm;
       if (!ip.trim()) return;
 
+      // IPv4 Regex Validation
+      // Checks for 4 groups of 0-255 separated by dots
+      const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+      
+      if (!ipv4Regex.test(ip.trim())) {
+          setNotification({
+              title: t.invalidIpTitle,
+              message: t.invalidIpMessage
+          });
+          setTimeout(() => setNotification(null), 4000);
+          return;
+      }
+
       const channels = Math.min(8, Math.max(1, parseInt(count) || 8));
       const start = parseInt(idStart) || 0;
       
       const newStream: Stream = {
           id: `device-${Date.now()}`,
           name: name.trim() || `${t.deviceDefault} ${ip}`,
-          ip: ip,
+          ip: ip.trim(),
+          port: 8999, // Placeholder for device port
           channels: channels,
           sampleRate: 48000,
           format: 'JSON',
@@ -346,10 +642,6 @@ const App: React.FC = () => {
       setStreams(prev => [newStream, ...prev]);
       setDeviceForm({ name: '', ip: '', idStart: '0', count: '8' });
       setExpandedSection('list');
-  };
-
-  const toggleLanguage = () => {
-    setLanguage(prev => prev === 'en' ? 'zh' : 'en');
   };
 
   return (
@@ -400,7 +692,11 @@ const App: React.FC = () => {
                         </div>
                     )}
                     {streams.map(stream => (
-                    <StreamCard key={stream.id} stream={stream} />
+                    <StreamCard 
+                        key={stream.id} 
+                        stream={stream} 
+                        onDelete={stream.sourceType !== 'sap' ? handleDeleteStream : undefined}
+                    />
                     ))}
                 </div>
               )}
@@ -538,21 +834,45 @@ const App: React.FC = () => {
                 <h2 className="font-semibold text-slate-100">{t.monitoringWall}</h2>
              </div>
              <div className="flex items-center gap-4">
-                 <button 
-                   onClick={toggleLanguage}
-                   className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all text-xs font-bold border border-slate-700"
-                   title="Switch Language"
-                 >
-                    <Languages size={14} />
-                    <span>{language === 'en' ? 'EN' : '中文'}</span>
-                 </button>
-                 <div className="h-4 w-px bg-slate-700" />
-                 <button className="p-2 hover:bg-slate-800 rounded-full transition-colors">
-                    <Settings size={18} className="text-slate-400 hover:text-teal-400" />
-                 </button>
-                 <button className="p-2 hover:bg-slate-800 rounded-full transition-colors">
-                    <Maximize2 size={18} className="text-slate-400 hover:text-teal-400" />
-                 </button>
+                 
+                 {/* Interface Selector Dropdown */}
+                 {interfaces.length > 0 && (
+                     <div className="flex items-center gap-2 bg-slate-800 rounded-md px-2 py-1 border border-slate-700">
+                        <Network size={14} className="text-teal-400" />
+                        <select 
+                            value={selectedNic}
+                            onChange={handleInterfaceChange}
+                            className="bg-transparent text-xs text-slate-300 focus:outline-none cursor-pointer max-w-[150px]"
+                            title={t.selectNic}
+                        >
+                            {interfaces.map(nic => (
+                                <option key={nic.address} value={nic.address} className="bg-slate-900 text-slate-200">
+                                    {nic.name} - {nic.address}
+                                </option>
+                            ))}
+                        </select>
+                     </div>
+                 )}
+
+                {/* Language Selector */}
+                 <div className="flex items-center gap-2 bg-slate-800 rounded-md px-2 py-1 border border-slate-700">
+                   <Languages size={14} className="text-slate-400" />
+                   <select 
+                       value={language}
+                       onChange={(e) => setLanguage(e.target.value as keyof typeof TRANSLATIONS)}
+                       className="bg-transparent text-xs text-slate-300 focus:outline-none cursor-pointer font-bold"
+                   >
+                       <option value="en">English</option>
+                       <option value="zh">中文</option>
+                       <option value="ja">日本語</option>
+                       <option value="fr">Français</option>
+                       <option value="de">Deutsch</option>
+                       <option value="ko">한국어</option>
+                       <option value="es">Español</option>
+                       <option value="it">Italiano</option>
+                   </select>
+                 </div>
+                 
              </div>
           </div>
 

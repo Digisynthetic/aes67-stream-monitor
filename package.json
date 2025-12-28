@@ -12,7 +12,13 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "lucide-react": "^0.562.0",
-    "@dnd-kit/core": "^6.3.1"
+    "@dnd-kit/core": "^6.3.1",
+    "path": "^0.12.7",
+    "url": "^0.11.4",
+    "os": "^0.1.2",
+    "electron": "^39.2.7",
+    "events": "^3.3.0",
+    "dgram": "^1.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

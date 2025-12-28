@@ -124,8 +124,8 @@ const MonitorSlotComponent: React.FC<MonitorSlotProps> = ({ slot, activeStream, 
                    >
                      <Edit2 size={12} />
                    </button>
-                   <span className="text-xs text-slate-500 font-mono hidden sm:inline-block ml-auto mr-2 truncate max-w-[100px]">
-                     {activeStream.ip}
+                   <span className="text-xs text-slate-500 font-mono hidden sm:inline-block ml-auto mr-2 truncate max-w-[120px]" title={`${activeStream.ip}:${activeStream.port}`}>
+                     {activeStream.ip}{activeStream.sourceType !== 'device' ? `:${activeStream.port}` : ''}
                    </span>
                  </div>
                )}

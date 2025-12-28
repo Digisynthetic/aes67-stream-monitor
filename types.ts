@@ -1,7 +1,9 @@
+
 export interface Stream {
   id: string;
   name: string;
   ip: string;
+  port: number; // Added port
   channels: number;
   sampleRate: number;
   format: string; // e.g., "L24" or "JSON"
@@ -24,6 +26,11 @@ export interface ChannelLevel {
 
 export interface StreamLevels {
   [streamId: string]: ChannelLevel[];
+}
+
+export interface NetworkInterface {
+  name: string;
+  address: string;
 }
 
 // Constants
