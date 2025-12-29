@@ -1,6 +1,6 @@
 # AES67 AoIP Stream Monitor
 
-![ICON](./public/icon.png)
+![GUI](./public/main.png)
 
 A powerful, cross-platform audio level monitoring solution built with **Node** and **Electron**. This tool allows broadcast engineers and audio technicians to discover and monitor real-time audio levels of AES67 or ST2110-30 multicast streams through a GUI.
 
