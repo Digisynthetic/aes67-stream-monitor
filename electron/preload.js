@@ -23,5 +23,17 @@ contextBridge.exposeInMainWorld('api', {
       const subscription = (event, levels) => callback(levels);
       ipcRenderer.on('audio-levels', subscription);
       return () => ipcRenderer.removeListener('audio-levels', subscription);
-  }
+  },
+  onDeviceLevels: (callback) => {
+      const subscription = (event, payload) => callback(payload);
+      ipcRenderer.on('device-levels', subscription);
+      return () => ipcRenderer.removeListener('device-levels', subscription);
+  },
+  onDeviceError: (callback) => {
+      const subscription = (event, payload) => callback(payload);
+      ipcRenderer.on('device-error', subscription);
+      return () => ipcRenderer.removeListener('device-error', subscription);
+  },
+  startDeviceMonitoring: (stream) => ipcRenderer.send('start-device-monitoring', stream),
+  stopDeviceMonitoring: (streamId) => ipcRenderer.send('stop-device-monitoring', streamId),
 });

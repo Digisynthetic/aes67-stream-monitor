@@ -54,6 +54,7 @@ class SapDiscovery extends EventEmitter {
             console.error(`[SAP] Failed to add membership for ${this.activeInterface}:`, e.message);
         }
     }
+    this.emit('interface-changed', this.activeInterface);
   }
 
   start() {

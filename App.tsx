@@ -8,10 +8,10 @@ import {
   DragStartEvent, 
   DragEndEvent 
 } from '@dnd-kit/core';
-import { MonitorSlot, Stream, StreamLevels, TOTAL_SLOTS, NetworkInterface } from './types';
+import { MonitorSlot, Stream, StreamLevels, TOTAL_SLOTS, NetworkInterface, ChannelLevel } from './types';
 import StreamCard from './components/StreamCard';
 import MonitorSlotComponent from './components/MonitorSlot';
-import { LayoutGrid, Radio, Settings, Maximize2, ChevronDown, ChevronRight, Plus, FileText, Globe, Server, Languages, AlertTriangle, X, Network } from 'lucide-react';
+import { LayoutGrid, Radio, Settings, Maximize2, ChevronDown, ChevronRight, Plus, FileText, Globe, Server, Languages, AlertTriangle, X, Network, Code } from 'lucide-react';
 
 const TRANSLATIONS = {
   en: {
@@ -264,6 +264,67 @@ const TRANSLATIONS = {
   }
 };
 
+const DEVICE_COMMAND_PAYLOAD = `{
+  "ops": "getVolumeDbBatchIn",
+  "idStart": "0"
+}`;
+
+const DEVICE_COMMAND_RESPONSE = `{
+  "ops": "getVolumeDbBatchIn",
+  "idStart": "0",
+  "arr": ["-97.4068"],
+  "idNext": "0",
+  "result": "succ"
+}`;
+
+const DEVICE_COMMAND_COPY = {
+  en: {
+    title: "Batch Level Query",
+    description: "Send this JSON to UDP port 8999 to pull input channel meter readings starting at the given index.",
+    commandLabel: "Command",
+    responseLabel: "Sample Response",
+    noteChannelStart: "`idStart` corresponds to channel IDs (0 = channel 1).",
+    noteIdNext: "`idNext` tells you the next channel index to request; when it matches `idStart`, all configured channels were returned.",
+    noteArr: "`arr` contains dBFS readings (-inf … 0) for each channel in order."
+  },
+  zh: {
+    title: "批量电平查询",
+    description: "将此 JSON 发送到设备的 UDP 8999 端口，可从指定 ID 开始批量获取输入通道电平。",
+    commandLabel: "请求命令",
+    responseLabel: "示例响应",
+    noteChannelStart: "`idStart` 表示通道编号（0 表示通道 1）。",
+    noteIdNext: "`idNext` 指示下次继续查询的通道索引；当它等于 `idStart` 时表示所有通道都已获取。",
+    noteArr: "`arr` 按顺序包含各通道的 dBFS 电平，取值范围从 -inf 到 0。"
+  }
+};
+
+const DBFLOOR = -100;
+const PEAK_DECAY = 0.5;
+
+const parseDeviceDb = (value: string | number | undefined): number => {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return DBFLOOR;
+    return Math.max(DBFLOOR, Math.min(0, value));
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (normalized === '-inf') return DBFLOOR;
+    const parsed = parseFloat(normalized);
+    if (Number.isFinite(parsed)) {
+      return Math.max(DBFLOOR, Math.min(0, parsed));
+    }
+  }
+
+  return DBFLOOR;
+};
+
+const calculatePeak = (current: number, previousPeak?: number): number => {
+  if (previousPeak === undefined) return current;
+  if (current > previousPeak) return current;
+  return Math.max(DBFLOOR, previousPeak - PEAK_DECAY);
+};
+
 // Notification Toast Component
 const NotificationToast = ({ message, onClose, title }: { message: string, onClose: () => void, title: string }) => (
   <div className="fixed top-20 right-8 z-50 animate-in fade-in slide-in-from-right-10 duration-300">
@@ -290,6 +351,7 @@ const App: React.FC = () => {
   // Language State
   const [language, setLanguage] = useState<keyof typeof TRANSLATIONS>('zh');
   const t = TRANSLATIONS[language];
+  const deviceCommandMeta = DEVICE_COMMAND_COPY[language] || DEVICE_COMMAND_COPY.en;
 
   // Sidebar UI State
   const [expandedSection, setExpandedSection] = useState<'list' | 'manual' | 'device'>('list');
@@ -389,6 +451,36 @@ const App: React.FC = () => {
                     return { ...prev, ...newLevels };
                 });
             });
+
+            const unsubscribeDeviceLevels = window.api.onDeviceLevels((payload: { streamId: string; arr: any[]; channels: number }) => {
+                const arr = Array.isArray(payload.arr) ? payload.arr : [];
+                if (!arr.length) return;
+                const channelCount = payload.channels || arr.length;
+
+                setStreamLevels(prev => {
+                    const previousLevels = prev[payload.streamId] || [];
+                    const updatedLevels: ChannelLevel[] = [];
+
+                    for (let idx = 0; idx < channelCount; idx++) {
+                        const dbValue = parseDeviceDb(arr[idx]);
+                        const prevPeak = previousLevels[idx]?.peak;
+                        const peak = calculatePeak(dbValue, prevPeak);
+                        updatedLevels.push({ current: dbValue, peak });
+                    }
+
+                    return { ...prev, [payload.streamId]: updatedLevels };
+                });
+            });
+
+            const unsubscribeDeviceError = window.api.onDeviceError((payload: { streamId: string; name?: string; message?: string }) => {
+                const title = (t as any).deviceErrorTitle || 'Device Polling Error';
+                const message = payload.message || ((t as any).deviceErrorMessage || 'No channel levels were returned from the device.');
+                setNotification({
+                    title,
+                    message: `${payload.name || payload.streamId}: ${message}`
+                });
+                setTimeout(() => setNotification(null), 5000);
+            });
             
             // Initial Interface Fetch
             // @ts-ignore
@@ -397,7 +489,12 @@ const App: React.FC = () => {
                 window.api.getInterfaces().then((nics: NetworkInterface[]) => {
                     setInterfaces(nics);
                     if (nics.length > 0) {
-                        setSelectedNic(nics[0].address);
+                        const primaryNic = nics[0];
+                        setSelectedNic(primaryNic.address);
+                        // @ts-ignore
+                        if (window.api && window.api.setInterface) {
+                            window.api.setInterface(primaryNic.address);
+                        }
                     }
                 });
             }
@@ -405,6 +502,8 @@ const App: React.FC = () => {
             return () => {
                 unsubscribeSap();
                 unsubscribeAudio();
+                unsubscribeDeviceLevels();
+                unsubscribeDeviceError();
             };
         }
     } else {
@@ -415,7 +514,7 @@ const App: React.FC = () => {
         ]);
         setSelectedNic("Localhost");
     }
-  }, [t.streamLost, t.streamLostMessage]);
+  }, [language]);
 
   // --- Monitoring Logic (Start/Stop Backend Monitoring) ---
   useEffect(() => {
@@ -525,10 +624,25 @@ const App: React.FC = () => {
 
   const handleDeleteStream = useCallback((streamId: string) => {
     // Only allow deletion of manual or device streams (client-side only removal)
-    setStreams(prev => prev.filter(stream => stream.id !== streamId));
-    
+    setStreams(prev => {
+      const toRemove = prev.find(stream => stream.id === streamId);
+      if (toRemove?.sourceType === 'device') {
+        const globalApi = (window as any).api;
+        if (globalApi?.stopDeviceMonitoring) {
+          globalApi.stopDeviceMonitoring(streamId);
+        }
+      }
+      return prev.filter(stream => stream.id !== streamId);
+    });
+
+    setStreamLevels(prev => {
+      const copy = { ...prev };
+      delete copy[streamId];
+      return copy;
+    });
+
     // Also clear from any active slot
-    setSlots(prev => prev.map(slot => 
+    setSlots(prev => prev.map(slot =>
         slot.activeStreamId === streamId ? { ...slot, activeStreamId: null } : slot
     ));
   }, []);
@@ -640,6 +754,10 @@ const App: React.FC = () => {
       };
 
       setStreams(prev => [newStream, ...prev]);
+      const globalApi = (window as any).api;
+      if (globalApi?.startDeviceMonitoring) {
+          globalApi.startDeviceMonitoring(newStream);
+      }
       setDeviceForm({ name: '', ip: '', idStart: '0', count: '8' });
       setExpandedSection('list');
   };
@@ -803,7 +921,7 @@ const App: React.FC = () => {
                              </div>
                         </div>
 
-                        <button 
+                        <button
                             onClick={handleAddDevice}
                             disabled={!deviceForm.ip}
                             className="w-full py-2 bg-teal-600 hover:bg-teal-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-teal-900/20 mt-1"
@@ -811,6 +929,31 @@ const App: React.FC = () => {
                             <Plus size={14} />
                             {t.addMonitor}
                         </button>
+                        <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-3 mt-2 text-[10px] text-slate-300 space-y-2">
+                            <div className="text-[10px] uppercase tracking-wider text-teal-400 font-semibold">
+                                {deviceCommandMeta.title}
+                            </div>
+                            <p className="text-[10px] leading-relaxed text-slate-300">
+                                {deviceCommandMeta.description}
+                            </p>
+                            <div className="text-[10px] text-slate-400 font-semibold">
+                                {deviceCommandMeta.commandLabel} - UDP 8999
+                            </div>
+                            <pre className="bg-slate-900/70 border border-slate-800 rounded-lg p-2 font-mono text-[10px] text-emerald-200 whitespace-pre-wrap">
+{DEVICE_COMMAND_PAYLOAD}
+                            </pre>
+                            <div className="text-[10px] text-slate-400 font-semibold">
+                                {deviceCommandMeta.responseLabel}
+                            </div>
+                            <pre className="bg-slate-900/70 border border-slate-800 rounded-lg p-2 font-mono text-[10px] text-emerald-300 whitespace-pre-wrap">
+{DEVICE_COMMAND_RESPONSE}
+                            </pre>
+                            <ul className="list-disc pl-4 space-y-1 text-[10px] text-slate-400">
+                                <li>{deviceCommandMeta.noteChannelStart}</li>
+                                <li>{deviceCommandMeta.noteIdNext}</li>
+                                <li>{deviceCommandMeta.noteArr}</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
               )}
@@ -819,10 +962,10 @@ const App: React.FC = () => {
           </div>
 
            {/* Footer */}
-           <div className="p-4 border-t border-slate-800 text-xs text-slate-500 flex justify-between bg-slate-950/30 shrink-0">
-              <span className="flex items-center gap-1"><Globe size={10}/> {t.online}</span>
-              <span>v1.0.1 Pro</span>
-           </div>
+          <div className="p-4 border-t border-slate-800 text-xs text-slate-500 flex justify-between bg-slate-950/30 shrink-0">
+             <span className="flex items-center gap-1"><Code size={10}/> Powered by Kidney</span>
+             <span>V1.0.2</span>
+          </div>
         </aside>
 
         {/* --- RIGHT PANEL: Monitoring Wall --- */}
