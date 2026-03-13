@@ -15,6 +15,14 @@
     "package": "npm run build && electron-builder"
   },
   "build": {
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
     "icon": "dist/icon.ico",
     "win": {
       "icon": "dist/icon.ico"

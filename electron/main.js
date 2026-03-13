@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -28,8 +28,8 @@ function createWindow() {
       webSecurity: false, // Often needed for local dev with local resources
       sandbox: false // <--- CRITICAL FIX: Required for ESM preload scripts to work in some environments
     },
-    autoHideMenuBar: true,
-    menuBarVisible: false,
+    autoHideMenuBar: false,
+    menuBarVisible: true,
   });
 
   // Smart URL loading:
@@ -37,15 +37,37 @@ function createWindow() {
   // 2. If not packaged (Development), try localhost:3000
   // 3. If packaged (Production), use the built index.html
   const isDev = !app.isPackaged;
-  const startUrl = process.env.ELECTRON_START_URL || (isDev ? 'http://localhost:3000' : `file://${path.join(__dirname, '../dist/index.html')}`);
+  const devUrl = process.env.ELECTRON_START_URL || 'http://localhost:3000';
+  const packagedIndexInAsar = path.join(__dirname, '../dist/index.html');
+  const packagedIndexInResources = path.join(process.resourcesPath, 'app.asar', 'dist', 'index.html');
 
-  console.log(`[Main] Loading URL: ${startUrl}`);
-  mainWindow.loadURL(startUrl);
+  if (isDev) {
+    console.log(`[Main] Loading URL: ${devUrl}`);
+    mainWindow.loadURL(devUrl);
+  } else {
+    const target = fs.existsSync(packagedIndexInAsar) ? packagedIndexInAsar : packagedIndexInResources;
+    console.log(`[Main] Loading file: ${target}`);
+    mainWindow.loadFile(target);
+  }
 
   // Open DevTools in development to help debugging
   if (isDev || enableDevtools) {
     mainWindow.webContents.openDevTools();
   }
+}
+
+function setupAppMenu() {
+  const template = [
+    {
+      label: 'About',
+      click: () => {
+        shell.openExternal('https://www.digisynthetic.com/');
+      },
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 }
 
 let logStream;
@@ -81,7 +103,7 @@ function setupLogging() {
 
 app.whenReady().then(() => {
   setupLogging();
-  Menu.setApplicationMenu(null);
+  setupAppMenu();
   createWindow();
 
   // Initialize Services

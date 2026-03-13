@@ -31,28 +31,35 @@ class Aes67DeviceDiscovery extends EventEmitter {
     this.devices = new Map();
     this.activeInterface = null;
     this.pruneTimer = null;
+    this.joinedInterface = null;
+    this.isBound = false;
   }
 
   setInterface(ip) {
-    if (this.activeInterface === ip) return;
+    this.activeInterface = ip || null;
+    this.joinMembership();
+  }
 
-    if (this.socket && this.activeInterface) {
+  joinMembership() {
+    if (!this.socket || !this.activeInterface || !this.isBound) return;
+
+    if (this.joinedInterface && this.joinedInterface !== this.activeInterface) {
       try {
-        this.socket.dropMembership(DISCOVERY_GROUP, this.activeInterface);
-      } catch (error) {
-        console.warn(`[AES67] drop membership failed: ${error.message}`);
+        this.socket.dropMembership(DISCOVERY_GROUP, this.joinedInterface);
+      } catch {
+        // ignore
       }
+      this.joinedInterface = null;
     }
 
-    this.activeInterface = ip || null;
+    if (this.joinedInterface === this.activeInterface) return;
 
-    if (this.socket && this.activeInterface) {
-      try {
-        this.socket.addMembership(DISCOVERY_GROUP, this.activeInterface);
-        console.log(`[AES67] Listening on ${DISCOVERY_GROUP}:${DISCOVERY_PORT} via ${this.activeInterface}`);
-      } catch (error) {
-        console.error(`[AES67] add membership failed: ${error.message}`);
-      }
+    try {
+      this.socket.addMembership(DISCOVERY_GROUP, this.activeInterface);
+      this.joinedInterface = this.activeInterface;
+      console.log(`[AES67] JOIN OK ${DISCOVERY_GROUP} via ${this.activeInterface}`);
+    } catch (error) {
+      console.error(`[AES67] JOIN ERR via ${this.activeInterface}: ${error.message}`);
     }
   }
 
@@ -60,6 +67,7 @@ class Aes67DeviceDiscovery extends EventEmitter {
     if (this.socket) return;
 
     this.socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    this.isBound = false;
 
     this.socket.on('error', (error) => {
       console.error(`[AES67] socket error: ${error.message}`);
@@ -69,17 +77,11 @@ class Aes67DeviceDiscovery extends EventEmitter {
       this.handleMessage(msg, rinfo);
     });
 
-    this.socket.bind(DISCOVERY_PORT, () => {
-      if (this.activeInterface) {
-        this.setInterface(this.activeInterface);
-      } else {
-        try {
-          this.socket.addMembership(DISCOVERY_GROUP);
-          console.log(`[AES67] Listening on ${DISCOVERY_GROUP}:${DISCOVERY_PORT} (default interface)`);
-        } catch (error) {
-          console.error(`[AES67] default membership failed: ${error.message}`);
-        }
-      }
+    this.socket.bind({ port: DISCOVERY_PORT, address: '0.0.0.0', exclusive: false }, () => {
+      const addr = this.socket.address();
+      this.isBound = true;
+      console.log(`[AES67] BOUND ${addr.address}:${addr.port}`);
+      this.joinMembership();
     });
 
     this.pruneTimer = setInterval(() => this.pruneOffline(), PRUNE_INTERVAL_MS);
@@ -92,12 +94,21 @@ class Aes67DeviceDiscovery extends EventEmitter {
     }
 
     if (this.socket) {
+      if (this.joinedInterface) {
+        try {
+          this.socket.dropMembership(DISCOVERY_GROUP, this.joinedInterface);
+        } catch {
+          // ignore
+        }
+      }
       try {
         this.socket.close();
       } catch {
         // ignore
       }
       this.socket = null;
+      this.joinedInterface = null;
+      this.isBound = false;
     }
 
     this.devices.clear();
@@ -105,33 +116,30 @@ class Aes67DeviceDiscovery extends EventEmitter {
   }
 
   handleMessage(msg, rinfo) {
-    console.log(`[AES67] UDP packet from ${rinfo.address}:${rinfo.port}, bytes=${msg.length}`);
+    console.log(`[AES67] PKT ${rinfo.address}:${rinfo.port} len=${msg.length}`);
     const payload = parseJsonFromBuffer(msg);
-    if (!payload || typeof payload !== 'object') {
-      console.log(`[AES67] Parse failed. payloadPreview=${msg.toString('utf8').slice(0, 200)}`);
-      return;
-    }
+    if (!payload || typeof payload !== 'object') return;
 
-    const normalizedKeyMap = Object.fromEntries(
-      Object.entries(payload).map(([k, v]) => [String(k).replace(/\s+/g, '').toLowerCase(), v])
-    );
-    const rawOps = String(payload.ops ?? normalizedKeyMap.ops ?? '');
+    const rawOps = String(payload.ops || '');
     const normalizedOps = rawOps.replace(/\s+/g, '').toLowerCase();
-    if (normalizedOps !== 'iamdigisyn' && normalizedOps !== 'whoisdigisyn') {
-      console.log(`[AES67] Ignore packet ops=${rawOps}`);
+    // Only device advertisement packets are valid device sources.
+    if (normalizedOps !== 'iamdigisyn') return;
+
+    const devId = String(payload.devId || payload.name || `${rinfo.address}`).trim();
+    if (!devId) return;
+
+    const model = String(payload.model || '').trim();
+    if (model.toLowerCase() === 'vsndcard') {
       return;
     }
-
-    const devId = String(payload.devId ?? normalizedKeyMap.devid ?? payload.name ?? normalizedKeyMap.name ?? `${rinfo.address}`).trim();
-    if (!devId) return;
 
     const next = {
       devId,
-      name: String(payload.name ?? normalizedKeyMap.name ?? devId),
-      model: String(payload.model ?? normalizedKeyMap.model ?? ''),
-      ip: String(payload.ip ?? normalizedKeyMap.ip ?? rinfo.address),
-      phyChNumTx: toNumber(payload.phyChNumTx ?? normalizedKeyMap.phychnumtx, 0),
-      chNumTx: toNumber(payload.chNumTx ?? normalizedKeyMap.chnumtx, 0),
+      name: String(payload.name || devId),
+      model,
+      ip: String(payload.ip || rinfo.address),
+      phyChNumTx: toNumber(payload.phyChNumTx, 0),
+      chNumTx: toNumber(payload.chNumTx, 0),
       lastSeenAt: Date.now(),
       offline: false
     };
@@ -148,7 +156,7 @@ class Aes67DeviceDiscovery extends EventEmitter {
 
     this.devices.set(devId, next);
     if (changed) {
-      console.log(`[AES67] Device update: ${next.name} (${next.ip}) ops=${rawOps}`);
+      console.log(`[AES67] Device update: ${next.name} (${next.ip})`);
       this.emitDevices();
     }
   }
@@ -168,9 +176,7 @@ class Aes67DeviceDiscovery extends EventEmitter {
       }
     }
 
-    if (changed) {
-      this.emitDevices();
-    }
+    if (changed) this.emitDevices();
   }
 
   emitDevices() {
