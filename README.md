@@ -13,7 +13,7 @@ A powerful, cross-platform audio level monitoring solution built with **Node** a
 * **Multi-Protocol Discovery**:
     * **SAP Auto-Discovery**: Automatically lists active multicast streams on the network.
     * **Manual SDP Input**: Support for manual stream entry via SDP text for devices without SAP.
-    * **UDP Device Level Monitoring**: Direct batch monitoring of specific input channels via target device IP.
+    * **DIGISYNTHETIC AES67 Device Discovery + Output Monitoring**: Auto-listens on `239.0.0.188:9996`, builds analog/network output group cards, and polls output levels from device `ip:8999` only after drag-and-drop into slots.
 * **Real-time Visualization**: High-precision **dBFs** meters for accurate signal quality judgment.
 * **Drag-and-Drop Workflow**: Easily assign audio streams from the discovery list to a multi-screen monitoring wall.
 * **Multilingual Interface**: Supports 8 languages (English, Chinese, Japanese, French, German, Korean, Spanish, and Italian).
@@ -55,7 +55,14 @@ Upon startup, select the **network interface card (NIC)** connected to your AoIP
 ## 3. Adding Audio Streams
 * **SAP Discovery:** Streams found automatically will appear in the left-hand sidebar.
 * **Manual SDP:** Paste the SDP text obtained from your source device to add streams manually.
-* **Device Level (UDP):** Enter the target device IP and channel range (1-8 channels) to monitor hardware input levels directly. This supports offline configuration.
+* **Online AES67 Devices:** The app listens for device discovery packets on `239.0.0.188:9996`.
+* Expand a device card to see child cards (max 8 channels per card):
+  * Analog groups (red theme)
+  * Network groups (green theme)
+* Drag a child card to the right-side monitoring wall to start polling output levels (`getVolumeDbBatchOut`) from `device_ip:8999` at 3Hz.
+* Device offline rules:
+  * No discovery packet for 15s => related cards/meters turn gray.
+  * No valid level JSON for 10s after monitoring starts => corresponding meter turns gray.
 
 ---
 

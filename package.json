@@ -1,6 +1,6 @@
 {
   "name": "aes67-stream-monitor",
-  "version": "1.0.2",
+  "version": "1.0.6",
   "private": true,
   "type": "module",
   "description": "AOIP STREAM MONITOR",
@@ -13,6 +13,12 @@
     "dev:app": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && npm run dev:electron\"",
     "build": "vite build",
     "package": "npm run build && electron-builder"
+  },
+  "build": {
+    "icon": "dist/icon.ico",
+    "win": {
+      "icon": "dist/icon.ico"
+    }
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

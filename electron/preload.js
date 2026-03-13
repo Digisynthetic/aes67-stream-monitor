@@ -34,6 +34,13 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('device-error', subscription);
       return () => ipcRenderer.removeListener('device-error', subscription);
   },
+  onAes67Devices: (callback) => {
+      const subscription = (event, devices) => callback(devices);
+      ipcRenderer.on('aes67-devices', subscription);
+      return () => ipcRenderer.removeListener('aes67-devices', subscription);
+  },
   startDeviceMonitoring: (stream) => ipcRenderer.send('start-device-monitoring', stream),
   stopDeviceMonitoring: (streamId) => ipcRenderer.send('stop-device-monitoring', streamId),
+  startDeviceGroupMonitoring: (group) => ipcRenderer.send('start-device-group-monitoring', group),
+  stopDeviceGroupMonitoring: (groupId) => ipcRenderer.send('stop-device-group-monitoring', groupId),
 });

@@ -21,6 +21,7 @@ const MonitorSlotComponent: React.FC<MonitorSlotProps> = ({ slot, activeStream, 
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const allowRename = activeStream ? activeStream.sourceType !== 'device-group' : false;
 
   // Sync tempName when stream changes or starts editing
   useEffect(() => {
@@ -71,6 +72,8 @@ const MonitorSlotComponent: React.FC<MonitorSlotProps> = ({ slot, activeStream, 
   const activeStreamPortLabel = activeStream
     ? activeStream.sourceType === 'device'
       ? activeStream.deviceConfig?.pollingPort ?? activeStream.port
+      : activeStream.sourceType === 'device-group'
+      ? activeStream.deviceGroupConfig?.pollingPort ?? activeStream.port
       : activeStream.port
     : '';
   const activeStreamAddressLabel = activeStream ? `${activeStream.ip}:${activeStreamPortLabel}` : '';
@@ -98,7 +101,7 @@ const MonitorSlotComponent: React.FC<MonitorSlotProps> = ({ slot, activeStream, 
                <div className="w-2 h-2 shrink-0 rounded-full bg-teal-400 animate-pulse shadow-[0_0_8px_rgba(45,212,191,0.6)]" />
                
                {/* Name / Rename Input */}
-               {isEditing ? (
+               {isEditing && allowRename ? (
                  <div className="flex items-center flex-1 gap-1">
                    <input
                      ref={inputRef}
@@ -120,17 +123,19 @@ const MonitorSlotComponent: React.FC<MonitorSlotProps> = ({ slot, activeStream, 
                   <div className="flex items-center gap-2 flex-1 min-w-0 group/title">
                     <span
                       className="font-bold text-sm text-slate-100 truncate cursor-text"
-                      onDoubleClick={() => setIsEditing(true)}
+                      onDoubleClick={() => allowRename && setIsEditing(true)}
                       title={t.rename}
                     >
                       {activeStream.name}
                     </span>
-                    <button
-                       onClick={() => setIsEditing(true)}
-                       className="opacity-0 group-hover/title:opacity-100 transition-opacity text-slate-500 hover:text-teal-400"
-                    >
-                      <Edit2 size={12} />
-                    </button>
+                    {allowRename && (
+                      <button
+                        onClick={() => setIsEditing(true)}
+                        className="opacity-0 group-hover/title:opacity-100 transition-opacity text-slate-500 hover:text-teal-400"
+                      >
+                        <Edit2 size={12} />
+                      </button>
+                    )}
                   </div>
                 )}
              </div>
@@ -163,16 +168,21 @@ const MonitorSlotComponent: React.FC<MonitorSlotProps> = ({ slot, activeStream, 
                 }
 
                 const levelData = levels ? levels[idx] : { current: -100, peak: -100 };
+                const normalizedLevel = activeStream.isOffline
+                  ? { ...levelData, offline: true, clipped: false, current: -100, peak: -100 }
+                  : levelData;
                 // Adjust label for Device streams to match global ID
                 const label = activeStream.sourceType === 'device' && activeStream.deviceConfig
                     ? (activeStream.deviceConfig.idStart + idx).toString()
+                    : activeStream.sourceType === 'device-group' && activeStream.deviceGroupConfig
+                    ? (activeStream.deviceGroupConfig.start + idx + 1).toString()
                     : (idx + 1).toString();
 
                 return (
                     <LevelMeter 
                         key={`${slot.id}-ch-${idx}`} 
                         index={idx} 
-                        level={levelData} 
+                        level={normalizedLevel} 
                         channelName={label}
                     />
                 );

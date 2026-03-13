@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import SapDiscovery from './services/SapDiscovery.js';
 import AudioMonitor from './services/AudioMonitor.js';
 import DeviceLevelPoller from './services/DeviceLevelPoller.js';
+import Aes67DeviceDiscovery from './services/Aes67DeviceDiscovery.js';
 
 // Manually define __filename and __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -14,6 +15,7 @@ let mainWindow;
 let sapService;
 let audioMonitor;
 let devicePoller;
+let aes67Discovery;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -86,6 +88,7 @@ app.whenReady().then(() => {
   sapService = new SapDiscovery();
   audioMonitor = new AudioMonitor();
   devicePoller = new DeviceLevelPoller();
+  aes67Discovery = new Aes67DeviceDiscovery();
 
   sapService.on('interface-changed', (ip) => {
     if (ip) {
@@ -93,6 +96,15 @@ app.whenReady().then(() => {
       if (audioMonitor) {
         audioMonitor.setInterface(ip);
       }
+      if (aes67Discovery) {
+        aes67Discovery.setInterface(ip);
+      }
+    }
+  });
+
+  aes67Discovery.on('devices', (devices) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('aes67-devices', devices);
     }
   });
   
@@ -132,6 +144,9 @@ app.whenReady().then(() => {
   ipcMain.on('set-interface', (event, ip) => {
     console.log(`[Main] Switching interface to: ${ip}`);
     sapService.setInterface(ip);
+    if (aes67Discovery) {
+      aes67Discovery.setInterface(ip);
+    }
   });
 
   // 2. Start/Stop Monitoring specific streams
@@ -153,8 +168,17 @@ app.whenReady().then(() => {
     if (devicePoller) devicePoller.stop(streamId);
   });
 
+  ipcMain.on('start-device-group-monitoring', (event, group) => {
+    if (devicePoller) devicePoller.startGroup(group);
+  });
+
+  ipcMain.on('stop-device-group-monitoring', (event, groupId) => {
+    if (devicePoller) devicePoller.stop(groupId);
+  });
+
   // Start Discovery
   sapService.start();
+  aes67Discovery.start();
 });
 
 // Quit when all windows are closed.
@@ -162,6 +186,7 @@ app.on('window-all-closed', () => {
   // Stop audio service
   if (audioMonitor) audioMonitor.stopAll();
   if (devicePoller) devicePoller.stopAll();
+  if (aes67Discovery) aes67Discovery.stop();
   
   if (process.platform !== 'darwin') {
     app.quit();

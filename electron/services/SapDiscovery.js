@@ -15,10 +15,14 @@ class SapDiscovery extends EventEmitter {
   getInterfaces() {
     const interfaces = os.networkInterfaces();
     const result = [];
+    const seen = new Set();
     for (const name of Object.keys(interfaces)) {
-      for (const iface of interfaces[name]) {
+      for (const iface of interfaces[name] || []) {
+        if (!iface) continue;
+        const isIpv4 = iface.family === 'IPv4' || iface.family === 4;
         // Skip internal (localhost) and non-IPv4
-        if (iface.family === 'IPv4' && !iface.internal) {
+        if (isIpv4 && !iface.internal && iface.address && !seen.has(iface.address)) {
+          seen.add(iface.address);
           result.push({ name, address: iface.address });
         }
       }

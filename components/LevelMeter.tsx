@@ -9,12 +9,12 @@ interface LevelMeterProps {
 }
 
 const LevelMeter: React.FC<LevelMeterProps> = ({ level, index, channelName }) => {
-  const { current, peak } = level;
+  const { current, peak, clipped, offline } = level;
 
   // Calculate heights
   const heightPercent = dbToPercent(current);
   const peakPercent = dbToPercent(peak);
-  const color = getMeterColor(current);
+  const color = getMeterColor(current, { clipped, offline });
 
   return (
     <div className="flex flex-col items-center gap-1 w-full h-full">
@@ -35,7 +35,7 @@ const LevelMeter: React.FC<LevelMeterProps> = ({ level, index, channelName }) =>
           style={{
             height: `${heightPercent}%`,
             backgroundColor: color,
-            boxShadow: `0 0 12px ${color}40` // Subtle glow matching the vibrant colors
+            boxShadow: offline ? 'none' : `0 0 12px ${color}40`
           }}
         />
 
@@ -44,7 +44,7 @@ const LevelMeter: React.FC<LevelMeterProps> = ({ level, index, channelName }) =>
           className="absolute w-full h-0.5 bg-white transition-all duration-300 ease-out z-10"
           style={{
             bottom: `${peakPercent}%`,
-            opacity: peak <= DB_MIN ? 0 : 0.9,
+            opacity: peak <= DB_MIN ? 0 : offline ? 0.35 : 0.9,
             boxShadow: '0 0 4px rgba(255,255,255,0.5)'
           }}
         />

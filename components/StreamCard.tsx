@@ -18,15 +18,28 @@ const StreamCard: React.FC<StreamCardProps> = ({ stream, isOverlay = false, onDe
   const baseClasses = "p-3 rounded-lg border flex flex-col gap-2 transition-colors cursor-grab active:cursor-grabbing group relative";
   
   // Updated colors to match logo theme
+  const isDeviceGroup = stream.sourceType === 'device-group';
+  const isAnalogGroup = isDeviceGroup && stream.deviceGroupConfig?.kind === 'analog';
+  const isOffline = !!stream.isOffline;
+
   const styles = isOverlay
     ? "bg-teal-600 border-teal-400 shadow-[0_0_20px_rgba(45,212,191,0.3)] scale-105 z-50 opacity-100 text-white"
+    : isOffline
+    ? "bg-slate-800/50 border-slate-700 opacity-60 grayscale"
     : isDragging
     ? "bg-slate-800/50 border-slate-700 opacity-40 border-dashed"
+    : isAnalogGroup
+    ? "bg-slate-800 border-rose-500/50 hover:border-rose-400 hover:bg-slate-750 hover:shadow-lg hover:shadow-rose-900/20"
+    : isDeviceGroup
+    ? "bg-slate-800 border-emerald-500/50 hover:border-emerald-400 hover:bg-slate-750 hover:shadow-lg hover:shadow-emerald-900/20"
     : "bg-slate-800 border-slate-700 hover:border-teal-500/50 hover:bg-slate-750 hover:shadow-lg hover:shadow-teal-900/20";
 
   // Determine Icon based on source Type
   const renderIcon = () => {
       if (stream.sourceType === 'device') return <Server size={16} className={isOverlay ? "text-white" : "text-amber-400"} />;
+      if (stream.sourceType === 'device-group') {
+        return <Server size={16} className={isOverlay ? "text-white" : isAnalogGroup ? "text-rose-400" : "text-emerald-400"} />;
+      }
       if (stream.sourceType === 'manual') return <Radio size={16} className={isOverlay ? "text-white" : "text-sky-400"} />;
       return <Signal size={16} className={isOverlay ? "text-white" : "text-teal-400"} />;
   };
@@ -75,6 +88,13 @@ const StreamCard: React.FC<StreamCardProps> = ({ stream, isOverlay = false, onDe
              <div className="flex items-center gap-1 col-span-2 sm:col-span-1">
                 <Hash size={10} className="opacity-50" />
                 <span>ID: {stream.deviceConfig.idStart}</span>
+             </div>
+        ) : stream.sourceType === 'device-group' && stream.deviceGroupConfig ? (
+            <div className="flex items-center gap-1 col-span-2 sm:col-span-1">
+                <Hash size={10} className="opacity-50" />
+                <span>
+                  {stream.deviceGroupConfig.kind === 'analog' ? 'Analog' : 'Network'} {stream.deviceGroupConfig.start + 1}-{stream.deviceGroupConfig.start + stream.deviceGroupConfig.count}
+                </span>
              </div>
         ) : (
             <div className="flex items-center gap-1 col-span-2 sm:col-span-1">

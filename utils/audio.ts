@@ -19,9 +19,9 @@ export const dbToPercent = (db: number): number => {
  * Yellow/Orange: -18 to 0 dBFS (Headroom/Warning)
  * Red: ~0 dBFS (Clipping)
  */
-export const getMeterColor = (db: number): string => {
-  // Trigger red when extremely close to 0 or at 0
-  if (db >= -0.2) return '#ef4444'; // Red-500 (Clip)
+export const getMeterColor = (db: number, options?: { clipped?: boolean; offline?: boolean }): string => {
+  if (options?.offline) return '#64748b'; // Slate-500
+  if (options?.clipped || db >= -2) return '#ef4444'; // Red-500 (clip threshold)
   if (db >= -18) return '#f59e0b'; // Amber-500 (Warning/Headroom)
   return '#22c55e'; // Green-500 (Normal)
 };
