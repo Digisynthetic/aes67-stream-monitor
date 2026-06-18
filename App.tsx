@@ -12,7 +12,7 @@ import { MonitorSlot, Stream, StreamLevels, TOTAL_SLOTS, NetworkInterface, Chann
 import StreamCard from './components/StreamCard';
 import MonitorSlotComponent from './components/MonitorSlot';
 import { splitDeviceToGroups } from './utils/deviceGroups';
-import { createManualStreamId, parseSdp } from './utils/sdp';
+import { createManualStreamId, parseSdp } from './utils/sdp.js';
 import { LayoutGrid, Radio, ChevronDown, ChevronRight, Plus, FileText, Languages, AlertTriangle, X, Network, Code, Server } from 'lucide-react';
 
 const TRANSLATIONS = {

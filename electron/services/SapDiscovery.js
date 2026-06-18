@@ -1,6 +1,7 @@
 import dgram from 'dgram';
 import os from 'os';
 import { EventEmitter } from 'events';
+import { parseSdp } from '../../utils/sdp.js';
 
 class SapDiscovery extends EventEmitter {
   constructor() {
@@ -127,53 +128,24 @@ class SapDiscovery extends EventEmitter {
   }
 
   parseSdp(text, sourceIp) {
-    const lines = text.split('\n').map(l => l.trim());
-    
-    let name = 'Unknown Stream';
-    let ip = '';
-    let port = 5004; // Default RTP port
-    let id = '';
-    let channels = 2;
-    let sampleRate = 48000;
-    
-    lines.forEach(line => {
-      if (line.startsWith('s=')) name = line.substring(2);
-      if (line.startsWith('c=')) {
-        // c=IN IP4 239.0.0.1/32
-        const parts = line.split(' ');
-        if (parts.length >= 3) ip = parts[2].split('/')[0];
-      }
-      if (line.startsWith('m=')) {
-        // m=audio 5004 RTP/AVP 96
-        const parts = line.split(' ');
-        if (parts.length >= 2) {
-            const parsedPort = parseInt(parts[1]);
-            if (!isNaN(parsedPort)) port = parsedPort;
-        }
-      }
-      if (line.startsWith('o=')) {
-        // o=- 12345 12345 IN IP4 10.0.0.1
-        // Use Origin line for unique ID
-        id = line; 
-      }
-      if (line.startsWith('a=rtpmap:')) {
-        // a=rtpmap:96 L24/48000/2
-        const parts = line.split('/');
-        if (parts.length >= 2) sampleRate = parseInt(parts[1]);
-        if (parts.length >= 3) channels = parseInt(parts[2]);
-      }
-    });
+    const parsed = parseSdp(text, sourceIp);
 
-    if (!id) return null;
+    if (!parsed.isMonitorable || !parsed.ip || !parsed.port) return null;
+
+    const idSource = [
+      parsed.origin || parsed.name || 'unknown-origin',
+      parsed.ip,
+      parsed.port
+    ].join('|');
 
     return {
-      id: Buffer.from(id).toString('base64'), // Create safe ID
-      name,
-      ip: ip || sourceIp, // Fallback to packet source if multicast IP not found
-      port,
-      channels,
-      sampleRate,
-      format: 'L24', // Default for AES67
+      id: Buffer.from(idSource).toString('base64'), // Create safe ID
+      name: parsed.name || 'Unknown Stream',
+      ip: parsed.ip,
+      port: parsed.port,
+      channels: parsed.channels,
+      sampleRate: parsed.sampleRate,
+      format: parsed.format,
       sourceType: 'sap'
     };
   }

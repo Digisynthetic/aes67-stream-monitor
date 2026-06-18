@@ -1,25 +1,37 @@
-export interface ParsedSdp {
-  name?: string;
-  ip?: string;
-  port?: number;
-  channels: number;
-  sampleRate: number;
-  format: string;
-  origin?: string;
-  isMonitorable: boolean;
-}
-
 const DEFAULT_FORMAT = 'L24';
 const DEFAULT_SAMPLE_RATE = 48000;
 const DEFAULT_CHANNELS = 2;
 
-export function createManualStreamId(ip: string, port: number, uniquePart: number | string = Date.now()): string {
+/**
+ * @typedef {object} ParsedSdp
+ * @property {string=} name
+ * @property {string=} ip
+ * @property {number=} port
+ * @property {number} channels
+ * @property {number} sampleRate
+ * @property {string} format
+ * @property {string=} origin
+ * @property {boolean} isMonitorable
+ */
+
+/**
+ * @param {string} ip
+ * @param {number} port
+ * @param {number|string} [uniquePart]
+ * @returns {string}
+ */
+export function createManualStreamId(ip, port, uniquePart = Date.now()) {
   const safeIp = ip.replace(/[^a-zA-Z0-9.-]/g, '_');
   return `manual-${safeIp}-${port}-${uniquePart}`;
 }
 
-export function parseSdp(text: string, fallbackIp?: string): ParsedSdp {
-  const result: ParsedSdp = {
+/**
+ * @param {string} text
+ * @param {string=} fallbackIp
+ * @returns {ParsedSdp}
+ */
+export function parseSdp(text, fallbackIp) {
+  const result = {
     channels: DEFAULT_CHANNELS,
     sampleRate: DEFAULT_SAMPLE_RATE,
     format: DEFAULT_FORMAT,

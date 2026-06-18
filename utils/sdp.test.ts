@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createManualStreamId, parseSdp } from './sdp.ts';
+import { createManualStreamId, parseSdp } from './sdp.js';
 
 test('parses AES67 SDP name, connection, audio port, and rtpmap details', () => {
   const result = parseSdp([

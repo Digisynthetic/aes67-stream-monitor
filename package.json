@@ -22,6 +22,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "utils/sdp.js",
       "package.json"
     ],
     "icon": "dist/icon.ico",
