@@ -73,7 +73,7 @@ export function parseSdp(text, fallbackIp) {
     if (trimmed.startsWith('m=')) {
       const mediaParts = trimmed.slice(2).trim().split(/\s+/);
       if (mediaParts[0] === 'audio') {
-        const port = Number(mediaParts[1]);
+        const port = Number(mediaParts[1]?.split('/')[0]);
         if (Number.isInteger(port) && port > 0) {
           result.port = port;
         }

@@ -77,6 +77,18 @@ test('marks SDP with invalid audio media line as not monitorable', () => {
   assert.equal(result.isMonitorable, false);
 });
 
+test('parses audio media ports that include a port count', () => {
+  const result = parseSdp([
+    's=Port Count',
+    'c=IN IP4 239.81.83.67/32',
+    'm=audio 5004/2 RTP/AVP 97',
+    'a=rtpmap:97 L24/48000/8',
+  ].join('\n'));
+
+  assert.equal(result.port, 5004);
+  assert.equal(result.isMonitorable, true);
+});
+
 test('parses CRLF and LF input equivalently', () => {
   const lf = 's=Line Endings\nc=IN IP4 239.81.83.67/32\nm=audio 5004 RTP/AVP 97\na=rtpmap:97 L24/48000/8';
   const crlf = lf.replaceAll('\n', '\r\n');
