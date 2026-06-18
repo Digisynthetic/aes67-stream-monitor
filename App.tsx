@@ -514,7 +514,7 @@ const App: React.FC = () => {
 
           <div className="p-4 border-t border-slate-800 text-xs text-slate-500 flex justify-between bg-slate-950/30 shrink-0">
             <span className="flex items-center gap-1"><Code size={10} /> Powered by Kidney</span>
-            <span>V1.0.6</span>
+            <span>V1.0.7</span>
           </div>
         </aside>
 
