@@ -13,6 +13,11 @@ const DEFAULT_FORMAT = 'L24';
 const DEFAULT_SAMPLE_RATE = 48000;
 const DEFAULT_CHANNELS = 2;
 
+export function createManualStreamId(ip: string, port: number, uniquePart: number | string = Date.now()): string {
+  const safeIp = ip.replace(/[^a-zA-Z0-9.-]/g, '_');
+  return `manual-${safeIp}-${port}-${uniquePart}`;
+}
+
 export function parseSdp(text: string, fallbackIp?: string): ParsedSdp {
   const result: ParsedSdp = {
     channels: DEFAULT_CHANNELS,

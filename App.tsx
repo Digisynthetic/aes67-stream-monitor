@@ -12,6 +12,7 @@ import { MonitorSlot, Stream, StreamLevels, TOTAL_SLOTS, NetworkInterface, Chann
 import StreamCard from './components/StreamCard';
 import MonitorSlotComponent from './components/MonitorSlot';
 import { splitDeviceToGroups } from './utils/deviceGroups';
+import { createManualStreamId, parseSdp } from './utils/sdp';
 import { LayoutGrid, Radio, ChevronDown, ChevronRight, Plus, FileText, Languages, AlertTriangle, X, Network, Code, Server } from 'lucide-react';
 
 const TRANSLATIONS = {
@@ -37,7 +38,7 @@ const TRANSLATIONS = {
     streamLostMessage: 'The following stream has timed out:',
     selectNic: 'Select Network Interface',
     invalidSdpTitle: 'Invalid SDP Data',
-    invalidSdpMessage: 'The SDP data is missing required fields (v=, c=, m=). Please check your input.',
+    invalidSdpMessage: 'The SDP data is missing a monitorable IP address or RTP port. Please check your input.',
     analog: 'Analog',
     network: 'Network',
     phyOut: 'Physical Out',
@@ -65,7 +66,7 @@ const TRANSLATIONS = {
     streamLostMessage: '以下信号源已超时下线:',
     selectNic: '选择监听网卡',
     invalidSdpTitle: 'SDP 数据无效',
-    invalidSdpMessage: 'SDP 数据缺少关键字段 (v=, c=, m=)。请检查输入内容。',
+    invalidSdpMessage: 'SDP 数据缺少可监听的 IP 地址或 RTP 端口。请检查输入内容。',
     analog: '模拟',
     network: '网络',
     phyOut: '物理输出',
@@ -367,7 +368,9 @@ const App: React.FC = () => {
   const handleAddSdp = () => {
     if (!sdpInput.trim()) return;
 
-    if (!sdpInput.includes('v=') || !sdpInput.includes('c=') || !sdpInput.includes('m=')) {
+    const parsed = parseSdp(sdpInput);
+
+    if (!parsed.isMonitorable || !parsed.ip || !parsed.port) {
       setNotification({
         title: t.invalidSdpTitle,
         message: t.invalidSdpMessage
@@ -376,39 +379,14 @@ const App: React.FC = () => {
       return;
     }
 
-    const lines = sdpInput.split('\\n');
-    let name = t.manualStream;
-    let ip = 'Unknown IP';
-    let port = 5004;
-    let channels = 2;
-    let sampleRate = 48000;
-
-    lines.forEach((line) => {
-      const cleanLine = line.trim();
-      if (cleanLine.startsWith('s=')) name = cleanLine.substring(2).trim();
-      if (cleanLine.startsWith('c=')) {
-        const parts = cleanLine.split(' ');
-        if (parts.length >= 3) ip = parts[2].split('/')[0];
-      }
-      if (cleanLine.startsWith('m=')) {
-        const parts = cleanLine.split(' ');
-        if (parts.length >= 2) port = parseInt(parts[1], 10) || 5004;
-      }
-      if (cleanLine.startsWith('a=rtpmap:')) {
-        const parts = cleanLine.split('/');
-        if (parts.length >= 2) sampleRate = parseInt(parts[1], 10) || sampleRate;
-        if (parts.length >= 3) channels = parseInt(parts[2], 10) || channels;
-      }
-    });
-
     const newStream: Stream = {
-      id: `manual-${Date.now()}`,
-      name: name || t.unnamedManual,
-      ip: ip || '0.0.0.0',
-      port,
-      channels,
-      sampleRate,
-      format: 'L24',
+      id: createManualStreamId(parsed.ip, parsed.port),
+      name: parsed.name || t.unnamedManual,
+      ip: parsed.ip,
+      port: parsed.port,
+      channels: parsed.channels,
+      sampleRate: parsed.sampleRate,
+      format: parsed.format,
       sourceType: 'manual'
     };
 

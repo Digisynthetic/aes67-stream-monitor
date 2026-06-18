@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { parseSdp } from './sdp.ts';
+import { createManualStreamId, parseSdp } from './sdp.ts';
 
 test('parses AES67 SDP name, connection, audio port, and rtpmap details', () => {
   const result = parseSdp([
@@ -82,4 +82,13 @@ test('parses CRLF and LF input equivalently', () => {
   const crlf = lf.replaceAll('\n', '\r\n');
 
   assert.deepEqual(parseSdp(crlf), parseSdp(lf));
+});
+
+test('creates distinct manual stream IDs for same IP with different ports', () => {
+  const uniquePart = 12345;
+
+  assert.notEqual(
+    createManualStreamId('239.81.83.67', 5004, uniquePart),
+    createManualStreamId('239.81.83.67', 5005, uniquePart),
+  );
 });
