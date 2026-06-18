@@ -11,6 +11,7 @@
     "dev": "vite",
     "dev:electron": "electron .",
     "dev:app": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && npm run dev:electron\"",
+    "test": "node --test utils/sdp.test.ts",
     "build": "vite build",
     "package": "npm run build && electron-builder"
   },
